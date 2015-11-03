@@ -48,7 +48,7 @@ template <typename T>
 class xHerk : public clblasFunc
 {
 public:
-  xHerk(StatisticalTimer& timer, cl_device_type devType) : clblasFunc(timer,  devType)
+  xHerk(StatisticalTimer& timer, cl_device_type devType, int devID) : clblasFunc(timer,  devType, devID)
   {
     timer.getUniqueID("clHerk", 0);
   }

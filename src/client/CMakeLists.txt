@@ -22,15 +22,25 @@ set(CLIENT_HEADER
     clfunc_common.hpp
     clfunc_xgemm.hpp
     clfunc_xgemv.hpp
+    clfunc_xhemv.hpp
     clfunc_xsymv.hpp
     clfunc_xtrmm.hpp
     clfunc_xtrsm.hpp
     clfunc_xsyrk.hpp
     clfunc_xsyr2k.hpp
+	clfunc_xherk.hpp
+	clfunc_xher2k.hpp
 	clfunc_xhemm.hpp
 	clfunc_xsymm.hpp
-	clfunc_xherk.hpp
-	clfunc_xher2k.hpp)
+	clfunc_xger.hpp
+	clfunc_xgerc.hpp
+	clfunc_xgeru.hpp
+	clfunc_xher.hpp
+	clfunc_xher2.hpp
+    clfunc_xsyr.hpp
+    clfunc_xsyr2.hpp
+    clfunc_xtrmv.hpp
+    clfunc_xtrsv.hpp)
 
 set(WRAPPER_SRC testPerfWrapper.cpp)
 

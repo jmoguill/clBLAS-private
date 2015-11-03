@@ -48,7 +48,7 @@ template <typename T>
 class xGer : public clblasFunc
 {
 public:
-  xGer(StatisticalTimer& timer, cl_device_type devType) : clblasFunc(timer,  devType)
+  xGer(StatisticalTimer& timer, cl_device_type devType, int devID) : clblasFunc(timer,  devType, devID)
   {
     timer.getUniqueID("clGer", 0);
   }

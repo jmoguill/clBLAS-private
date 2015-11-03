@@ -50,8 +50,8 @@ template <typename T>
 class xTrsm : public clblasFunc
 {
 public:
-    xTrsm(StatisticalTimer& timer, cl_device_type devType) :
-        clblasFunc(timer, devType)
+    xTrsm(StatisticalTimer& timer, cl_device_type devType, int devID) :
+        clblasFunc(timer, devType, devID)
     {
         timer.getUniqueID("clTrsm", 0);
     }

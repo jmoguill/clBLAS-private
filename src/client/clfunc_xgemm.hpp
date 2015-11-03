@@ -55,8 +55,8 @@ template <typename T>
 class xGemm : public clblasFunc
 {
 public:
-    xGemm(StatisticalTimer& timer, cl_device_type devType, unsigned int iNumQueuesToUse) :
-        clblasFunc(timer, devType),
+    xGemm(StatisticalTimer& timer, cl_device_type devType, int devID, unsigned int iNumQueuesToUse) :
+        clblasFunc(timer, devType, devID),
         numQueuesToUse(iNumQueuesToUse)
     {
         timer.getUniqueID("clGemm", 0);

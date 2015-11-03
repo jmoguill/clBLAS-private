@@ -48,7 +48,7 @@ template <typename T>
 class xHemv : public clblasFunc
 {
 public:
-  xHemv(StatisticalTimer& timer, cl_device_type devType) : clblasFunc(timer,  devType)
+  xHemv(StatisticalTimer& timer, cl_device_type devType, int devID) : clblasFunc(timer,  devType, devID)
   {
     timer.getUniqueID("clHemv", 0);
   }

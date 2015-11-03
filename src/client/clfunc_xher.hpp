@@ -43,7 +43,7 @@ template <typename T>
 class xHer : public clblasFunc
 {
 public:
-  xHer(StatisticalTimer& timer, cl_device_type devType) : clblasFunc(timer,  devType)
+  xHer(StatisticalTimer& timer, cl_device_type devType, int devID) : clblasFunc(timer,  devType, devID)
   {
     timer.getUniqueID("clHer", 0);
   }

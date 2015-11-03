@@ -47,7 +47,7 @@ template <typename T>
 class xGeru : public clblasFunc
 {
 public:
-  xGeru(StatisticalTimer& timer, cl_device_type devType) : clblasFunc(timer,  devType)
+  xGeru(StatisticalTimer& timer, cl_device_type devType, int devID) : clblasFunc(timer,  devType, devID)
   {
     timer.getUniqueID("clGeru", 0);
   }

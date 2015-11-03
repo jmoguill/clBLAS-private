@@ -45,8 +45,8 @@ template <typename T>
 class xSymv : public clblasFunc
 {
 public:
-    xSymv(StatisticalTimer& _timer, cl_device_type devType) :
-        clblasFunc(_timer, devType)
+    xSymv(StatisticalTimer& _timer, cl_device_type devType, int devID) :
+        clblasFunc(_timer, devType, devID)
     {
         timer.getUniqueID("clSymv", 0);
     }

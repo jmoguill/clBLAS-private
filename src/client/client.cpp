@@ -61,6 +61,7 @@ int main(int argc, char *argv[])
   //clblasTranspose transB;
   int transA_option;
   int transB_option;
+  int device;
   size_t lda;
   size_t ldb;
   size_t ldc;
@@ -83,6 +84,7 @@ int main(int argc, char *argv[])
     ( "cpu,c", "Force instantiation of an OpenCL CPU device" )
     ( "all,a", "Force instantiation of all OpenCL devices" )
     ( "useimages", "Use an image-based kernel" )
+	( "device,dev", po::value<int>(&device)->default_value(0), "Select a device ID to run")
     ( "sizem,m", po::value<size_t>( &M )->default_value(128), "number of rows in A and C" )
     ( "sizen,n", po::value<size_t>( &N )->default_value(128), "number of columns in B and C" )
     ( "sizek,k", po::value<size_t>( &K )->default_value(128), "number of columns in A and rows in B" )
@@ -117,7 +119,9 @@ int main(int argc, char *argv[])
   {
     std::cout << desc << std::endl;
     return 0;
-  }
+  } 
+
+
 
   if( function != "gemm"
       && function != "trsm"
@@ -197,13 +201,13 @@ int main(int argc, char *argv[])
   if (function == "gemm")
   {
     if (precision == "s")
-      my_function = new xGemm<cl_float>(timer, deviceType, numQueuesToUse);
+      my_function = new xGemm<cl_float>(timer, deviceType, device, numQueuesToUse);
     else if (precision == "d")
-      my_function = new xGemm<cl_double>(timer, deviceType, numQueuesToUse);
+      my_function = new xGemm<cl_double>(timer, deviceType, device, numQueuesToUse);
     else if (precision == "c")
-      my_function = new xGemm<cl_float2>(timer, deviceType, numQueuesToUse);
+      my_function = new xGemm<cl_float2>(timer, deviceType, device, numQueuesToUse);
     else if (precision == "z")
-      my_function = new xGemm<cl_double2>(timer, deviceType, numQueuesToUse);
+      my_function = new xGemm<cl_double2>(timer, deviceType, device, numQueuesToUse);
     else
     {
       std::cerr << "Unknown gemm function" << std::endl;
@@ -213,13 +217,13 @@ int main(int argc, char *argv[])
   else if (function == "trsm")
   {
     if (precision == "s")
-      my_function = new xTrsm<cl_float>(timer, deviceType);
+      my_function = new xTrsm<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xTrsm<cl_double>(timer, deviceType);
+      my_function = new xTrsm<cl_double>(timer, deviceType, device);
     else if (precision == "c")
-      my_function = new xTrsm<cl_float2>(timer, deviceType);
+      my_function = new xTrsm<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xTrsm<cl_double2>(timer, deviceType);
+      my_function = new xTrsm<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown trsm function" << std::endl;
@@ -229,13 +233,13 @@ int main(int argc, char *argv[])
   else if (function == "trmm")
   {
     if (precision == "s")
-      my_function = new xTrmm<cl_float>(timer, deviceType);
+      my_function = new xTrmm<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xTrmm<cl_double>(timer, deviceType);
+      my_function = new xTrmm<cl_double>(timer, deviceType, device);
     else if (precision == "c")
-      my_function = new xTrmm<cl_float2>(timer, deviceType);
+      my_function = new xTrmm<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xTrmm<cl_double2>(timer, deviceType);
+      my_function = new xTrmm<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown trmm function" << std::endl;
@@ -245,13 +249,13 @@ int main(int argc, char *argv[])
   else if (function == "gemv")
   {
     if (precision == "s")
-      my_function = new xGemv<cl_float>(timer, deviceType);
+      my_function = new xGemv<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xGemv<cl_double>(timer, deviceType);
+      my_function = new xGemv<cl_double>(timer, deviceType, device);
     else if (precision == "c")
-      my_function = new xGemv<cl_float2>(timer, deviceType);
+      my_function = new xGemv<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xGemv<cl_double2>(timer, deviceType);
+      my_function = new xGemv<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown gemv function" << std::endl;
@@ -261,9 +265,9 @@ int main(int argc, char *argv[])
   else if (function == "symv")
   {
     if (precision == "s")
-      my_function = new xSymv<cl_float>(timer, deviceType);
+      my_function = new xSymv<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xSymv<cl_double>(timer, deviceType);
+      my_function = new xSymv<cl_double>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown symv function" << std::endl;
@@ -273,13 +277,13 @@ int main(int argc, char *argv[])
   else if (function == "syrk")
   {
     if (precision == "s")
-      my_function = new xSyrk<cl_float>(timer, deviceType);
+      my_function = new xSyrk<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xSyrk<cl_double>(timer, deviceType);
+      my_function = new xSyrk<cl_double>(timer, deviceType, device);
         else if (precision == "c")
-             my_function = new xSyrk<cl_float2>(timer, deviceType);
+             my_function = new xSyrk<cl_float2>(timer, deviceType, device);
         else if (precision == "z")
-             my_function = new xSyrk<cl_double2>(timer, deviceType);
+             my_function = new xSyrk<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown syrk function" << std::endl;
@@ -289,13 +293,13 @@ int main(int argc, char *argv[])
   else if (function == "syr2k")
   {
     if (precision == "s")
-      my_function = new xSyr2k<cl_float>(timer, deviceType);
+      my_function = new xSyr2k<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xSyr2k<cl_double>(timer, deviceType);
+      my_function = new xSyr2k<cl_double>(timer, deviceType, device);
     else if (precision == "c")
-      my_function = new xSyr2k<cl_float2>(timer, deviceType);
+      my_function = new xSyr2k<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xSyr2k<cl_double2>(timer, deviceType);
+      my_function = new xSyr2k<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown syr2k function" << std::endl;
@@ -305,13 +309,13 @@ int main(int argc, char *argv[])
   else if (function == "trsv")
   {
     if (precision == "s")
-      my_function = new xTrsv<cl_float>(timer, deviceType);
+      my_function = new xTrsv<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xTrsv<cl_double>(timer, deviceType);
+      my_function = new xTrsv<cl_double>(timer, deviceType, device);
     else if (precision == "c")
-      my_function = new xTrsv<cl_float2>(timer, deviceType);
+      my_function = new xTrsv<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xTrsv<cl_double2>(timer, deviceType);
+      my_function = new xTrsv<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown trsv function" << std::endl;
@@ -321,13 +325,13 @@ int main(int argc, char *argv[])
   else if (function == "trmv")
   {
     if (precision == "s")
-      my_function = new xTrmv<cl_float>(timer, deviceType);
+      my_function = new xTrmv<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xTrmv<cl_double>(timer, deviceType);
+      my_function = new xTrmv<cl_double>(timer, deviceType, device);
     else if (precision == "c")
-      my_function = new xTrmv<cl_float2>(timer, deviceType);
+      my_function = new xTrmv<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xTrmv<cl_double2>(timer, deviceType);
+      my_function = new xTrmv<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown trmv function" << std::endl;
@@ -337,9 +341,9 @@ int main(int argc, char *argv[])
   else if (function == "ger")
   {
     if (precision == "s")
-      my_function = new xGer<cl_float>(timer, deviceType);
+      my_function = new xGer<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-          my_function = new xGer<cl_double>(timer, deviceType);
+          my_function = new xGer<cl_double>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown ger function" << std::endl;
@@ -349,9 +353,9 @@ int main(int argc, char *argv[])
   else if (function == "syr")
   {
     if (precision == "s")
-      my_function = new xSyr<cl_float>(timer, deviceType);
+      my_function = new xSyr<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xSyr<cl_double>(timer, deviceType);
+      my_function = new xSyr<cl_double>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown syr function" << std::endl;
@@ -361,9 +365,9 @@ int main(int argc, char *argv[])
   else if (function == "syr2")
   {
     if (precision == "s")
-      my_function = new xSyr2<cl_float>(timer, deviceType);
+      my_function = new xSyr2<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xSyr2<cl_double>(timer, deviceType);
+      my_function = new xSyr2<cl_double>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown syr2 function" << std::endl;
@@ -373,9 +377,9 @@ int main(int argc, char *argv[])
   else if (function == "geru")
   {
     if (precision == "c")
-      my_function = new xGeru<cl_float2>(timer, deviceType);
+      my_function = new xGeru<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xGeru<cl_double2>(timer, deviceType);
+      my_function = new xGeru<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown geru function" << std::endl;
@@ -385,9 +389,9 @@ int main(int argc, char *argv[])
   else if (function == "gerc")
   {
     if (precision == "c")
-      my_function = new xGerc<cl_float2>(timer, deviceType);
+      my_function = new xGerc<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xGerc<cl_double2>(timer, deviceType);
+      my_function = new xGerc<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown gerc function" << std::endl;
@@ -397,9 +401,9 @@ int main(int argc, char *argv[])
   else if (function == "her")
   {
     if (precision == "c")
-      my_function = new xHer<cl_float2>(timer, deviceType);
+      my_function = new xHer<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xHer<cl_double2>(timer, deviceType);
+      my_function = new xHer<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown her function" << std::endl;
@@ -409,9 +413,9 @@ int main(int argc, char *argv[])
   else if (function == "her2")
   {
     if (precision == "c")
-      my_function = new xHer2<cl_float2>(timer, deviceType);
+      my_function = new xHer2<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xHer2<cl_double2>(timer, deviceType);
+      my_function = new xHer2<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown her2 function" << std::endl;
@@ -421,9 +425,9 @@ int main(int argc, char *argv[])
   else if (function == "hemv")
   {
     if (precision == "c")
-      my_function = new xHemv<cl_float2>(timer, deviceType);
+      my_function = new xHemv<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xHemv<cl_double2>(timer, deviceType);
+      my_function = new xHemv<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown hemv function" << std::endl;
@@ -433,9 +437,9 @@ int main(int argc, char *argv[])
   else if (function == "hemm")
   {
     if (precision == "c")
-      my_function = new xHemm<cl_float2>(timer, deviceType);
+      my_function = new xHemm<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xHemm<cl_double2>(timer, deviceType);
+      my_function = new xHemm<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown hemm function" << std::endl;
@@ -445,9 +449,9 @@ int main(int argc, char *argv[])
   else if (function == "herk")
   {
     if (precision == "c")
-      my_function = new xHerk<cl_float2>(timer, deviceType);
+      my_function = new xHerk<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xHerk<cl_double2>(timer, deviceType);
+      my_function = new xHerk<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown her function" << std::endl;
@@ -457,9 +461,9 @@ int main(int argc, char *argv[])
   else if (function == "her2k")
   {
     if (precision == "c")
-      my_function = new xHer2k<cl_float2>(timer, deviceType);
+      my_function = new xHer2k<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xHer2k<cl_double2>(timer, deviceType);
+      my_function = new xHer2k<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown her2 function" << std::endl;
@@ -469,13 +473,13 @@ int main(int argc, char *argv[])
   else if (function == "symm")
   {
     if (precision == "s")
-      my_function = new xSymm<cl_float>(timer, deviceType);
+      my_function = new xSymm<cl_float>(timer, deviceType, device);
     else if (precision == "d")
-      my_function = new xSymm<cl_double>(timer, deviceType);
+      my_function = new xSymm<cl_double>(timer, deviceType, device);
     else if (precision == "c")
-      my_function = new xSymm<cl_float2>(timer, deviceType);
+      my_function = new xSymm<cl_float2>(timer, deviceType, device);
     else if (precision == "z")
-      my_function = new xSymm<cl_double2>(timer, deviceType);
+      my_function = new xSymm<cl_double2>(timer, deviceType, device);
     else
     {
       std::cerr << "Unknown symm function" << std::endl;
@@ -501,60 +505,64 @@ int main(int argc, char *argv[])
       std::cerr << exc.what( ) << std::endl;
       return 1;
   }
+
+
+  std::cout << "Testing " << precision << function << " on device " << device << std::endl;
+
   if(roundtrip=="roundtrip"||roundtrip=="both")
   {
-  timer.Reset();
-  for( cl_uint i = 0; i < profileCount; ++i )
-  {
-    my_function->roundtrip_setup_buffer( order_option, side_option, uplo_option,
-                                 diag_option, transA_option, transB_option,
-                                   M, N, K, lda, ldb, ldc, offA, offBX, offCY,
-                                   alpha, beta );
+	  timer.Reset();
+	  for( cl_uint i = 0; i < profileCount; ++i )
+	  {
+		my_function->roundtrip_setup_buffer( order_option, side_option, uplo_option,
+									 diag_option, transA_option, transB_option,
+									   M, N, K, lda, ldb, ldc, offA, offBX, offCY,
+									   alpha, beta );
 
 
-    my_function->initialize_cpu_buffer();
-    /*my_function->initialize_gpu_buffer();
-    my_function->call_func();
-	my_function->read_gpu_buffer();
-    my_function->reset_gpu_write_buffer();*/
+		my_function->initialize_cpu_buffer();
+		/*my_function->initialize_gpu_buffer();
+		my_function->call_func();
+		my_function->read_gpu_buffer();
+		my_function->reset_gpu_write_buffer();*/
 	
-	if(memalloc=="default")
-	{
-		my_function->roundtrip_func();
-	}
-	else if (memalloc=="alloc_host_ptr")
-	{
-		my_function->allochostptr_roundtrip_func();
-	}
-	else if (memalloc=="use_host_ptr")
-	{
-		my_function->usehostptr_roundtrip_func();
-	}
-	else if (memalloc=="copy_host_ptr")
-	{
-		my_function->copyhostptr_roundtrip_func();
-	}
-	else if (memalloc=="use_persistent_mem_amd")
-	{
-		my_function->usepersismem_roundtrip_func();
-	}
-	else if (memalloc=="rect_mem")
-	{
-		my_function->roundtrip_func_rect();
-	}
-	//my_function->reset_gpu_write_buffer();
-	my_function->releaseGPUBuffer_deleteCPUBuffer();
-  }
+		if(memalloc=="default")
+		{
+			my_function->roundtrip_func();
+		}
+		else if (memalloc=="alloc_host_ptr")
+		{
+			my_function->allochostptr_roundtrip_func();
+		}
+		else if (memalloc=="use_host_ptr")
+		{
+			my_function->usehostptr_roundtrip_func();
+		}
+		else if (memalloc=="copy_host_ptr")
+		{
+			my_function->copyhostptr_roundtrip_func();
+		}
+		else if (memalloc=="use_persistent_mem_amd")
+		{
+			my_function->usepersismem_roundtrip_func();
+		}
+		else if (memalloc=="rect_mem")
+		{
+			my_function->roundtrip_func_rect();
+		}
+		//my_function->reset_gpu_write_buffer();
+		my_function->releaseGPUBuffer_deleteCPUBuffer();
+	  }
 
-  if( commandQueueFlags & CL_QUEUE_PROFILING_ENABLE )
-  {
-    //std::cout << timer << std::endl;
-    timer.pruneOutliers( 3.0 );
-    std::cout << "BLAS (round trip) execution time < ns >: " << my_function->time_in_ns() << std::endl;
-    std::cout << "BLAS (round trip) execution Gflops < " <<
-      my_function->gflops_formula() << " >: " << my_function->gflops() <<
-      std::endl;
-  }
+	  if( commandQueueFlags & CL_QUEUE_PROFILING_ENABLE )
+	  {
+		//std::cout << timer << std::endl;
+		timer.pruneOutliers( 3.0 );
+		std::cout << "BLAS (round trip) execution time < ns >: " << my_function->time_in_ns() << std::endl;
+		std::cout << "BLAS (round trip) execution Gflops < " <<
+		  my_function->gflops_formula() << " >: " << my_function->gflops() <<
+		  std::endl;
+	  }
   }
   if(roundtrip=="noroundtrip"||roundtrip=="both")
   {

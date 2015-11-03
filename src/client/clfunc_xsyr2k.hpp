@@ -53,8 +53,8 @@ template <typename T>
 class xSyr2k : public clblasFunc
 {
 public:
-    xSyr2k(StatisticalTimer& _timer, cl_device_type devType) :
-        clblasFunc(_timer, devType)
+    xSyr2k(StatisticalTimer& _timer, cl_device_type devType, int devID) :
+        clblasFunc(_timer, devType, devID)
     {
         timer.getUniqueID("clSyr2k", 0);
     }

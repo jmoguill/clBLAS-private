@@ -48,8 +48,8 @@ template <typename T>
 class xGemv : public clblasFunc
 {
 public:
-    xGemv(StatisticalTimer& timer, cl_device_type devType) :
-        clblasFunc(timer, devType)
+    xGemv(StatisticalTimer& timer, cl_device_type devType, int devID) :
+        clblasFunc(timer, devType, devID)
     {
         timer.getUniqueID("clGemv", 0);
     }

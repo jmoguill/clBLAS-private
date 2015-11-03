@@ -49,8 +49,8 @@ template <typename T>
 class xTrmm : public clblasFunc
 {
 public:
-    xTrmm(StatisticalTimer& timer, cl_device_type devType) :
-        clblasFunc(timer, devType)
+    xTrmm(StatisticalTimer& timer, cl_device_type devType, int devID) :
+        clblasFunc(timer, devType, devID)
     {
         timer.getUniqueID("clTrmm", 0);
     }

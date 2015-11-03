@@ -48,8 +48,8 @@ template <typename T>
 class xSyrk : public clblasFunc
 {
 public:
-    xSyrk(StatisticalTimer& _timer, cl_device_type devType) :
-        clblasFunc(_timer, devType)
+    xSyrk(StatisticalTimer& _timer, cl_device_type devType, int devID) :
+        clblasFunc(_timer, devType, devID)
     {
         timer.getUniqueID("clSyrk", 0);
     }
