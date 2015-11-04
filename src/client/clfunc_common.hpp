@@ -244,7 +244,8 @@ public:
 
 		platform_list = (cl_platform_id *)malloc(sizeof(cl_platform_id)*nrPlatforms);
 		clGetPlatformIDs(nrPlatforms, platform_list, NULL);
-		
+
+
 		//assume the 1st Platform
 		for (int i = 0; i < 1; i++) {
 
@@ -253,35 +254,44 @@ public:
 			assert(err == CL_SUCCESS);
 
 			device_list = (cl_device_id*)malloc(nrDevices * sizeof(*device_list));
-			assert(list);
+			assert(device_list);
 			
 			//Get the device_list
 			err = clGetDeviceIDs(platform_list[i], devType, nrDevices, device_list, NULL);
 			assert(err == CL_SUCCESS);
 
 			//List all the device Infor
-			for (i = 0; i < nrDevices; i++) {
-				err = clGetDeviceInfo(device_list[i], CL_DEVICE_NAME,
+			for (int j = 0; j < nrDevices; j++) {
+				err = clGetDeviceInfo(device_list[j], CL_DEVICE_NAME,
 					sizeof(deviceName), deviceName, NULL);
 				assert(err == CL_SUCCESS);
-				std::cout << "Device " << i << ": " << deviceName << " on Platform " << i << std::endl;
+
+                std::cout << "Platform " << i;
+                if (devType == CL_DEVICE_TYPE_CPU) {
+                    std::cout << " CPU ";
+                }
+                else {
+                    std::cout << " GPU ";
+                }
+                
+                std::cout << j << " : " << deviceName << std::endl;
 			}
 
 		}
 
-		if (deviceID >= nrDevices) {
-			std::cout << "deviceID is invalid. Number of devices is " << nrDevices << std::endl;
-
+        if (nrDevices < deviceID) {
+            std::cout << "deviceID "<< deviceID << " is invalid. Number of devices is " << nrDevices << std::endl;
             OPENCL_V_THROW(CL_INVALID_DEVICE, "deviceID is invalid");
-		}
-		else {
-			platform_ = platform_list[0];
-			device_ = device_list[deviceID];
-		}
-
+        }
+        else {
+            device_ = device_list[deviceID];
+        }
 
 		//OPENCL_V_THROW(clGetPlatformIDs(1, &platform_, NULL),"getting platform IDs");
-		//OPENCL_V_THROW(clGetDeviceIDs(platform_, devType, nrDevices, &device_list, NULL), "getting device IDs");
+
+
+        //OPENCL_V_THROW(clGetDeviceIDs(platform_, devType, 1, &device_, NULL), "getting CPU IDs");
+  
 
         props_[0] = CL_CONTEXT_PLATFORM;
         props_[1] = (cl_context_properties)platform_;

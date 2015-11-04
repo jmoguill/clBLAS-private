@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
     ( "cpu,c", "Force instantiation of an OpenCL CPU device" )
     ( "all,a", "Force instantiation of all OpenCL devices" )
     ( "useimages", "Use an image-based kernel" )
-	( "device,dev", po::value<int>(&device)->default_value(0), "Select a device ID to run")
+	( "device,dev", po::value<int>(&device)->default_value(0), "Select a GPU ID to run")
     ( "sizem,m", po::value<size_t>( &M )->default_value(128), "number of rows in A and C" )
     ( "sizen,n", po::value<size_t>( &N )->default_value(128), "number of columns in B and C" )
     ( "sizek,k", po::value<size_t>( &K )->default_value(128), "number of columns in A and rows in B" )
@@ -506,8 +506,12 @@ int main(int argc, char *argv[])
       return 1;
   }
 
+  std::cout << "Testing " << precision << function << " on ";
 
-  std::cout << "Testing " << precision << function << " on device " << device << std::endl;
+  if (deviceType == CL_DEVICE_TYPE_CPU) std::cout << "CPU " << std::endl;
+  if (deviceType == CL_DEVICE_TYPE_GPU) std::cout << "GPU " << device << std::endl;
+
+
 
   if(roundtrip=="roundtrip"||roundtrip=="both")
   {
