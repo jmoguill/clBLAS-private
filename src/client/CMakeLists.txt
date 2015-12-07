@@ -14,7 +14,7 @@
 # limitations under the License.
 # ########################################################################
 
-set(CLIENT_SRC client.cpp stdafx.cpp statisticalTimer.cpp)
+set(CLIENT_SRC client.cpp clblas2lapack.cpp stdafx.cpp statisticalTimer.cpp)
 set(CLIENT_HEADER
     stdafx.h
     targetver.h
@@ -58,10 +58,11 @@ include_directories(
     ${clBLAS_SOURCE_DIR}
     ${clBLAS_SOURCE_DIR}/include
     ${clBLAS_SOURCE_DIR}/tests/include
+    ${ACML_INCLUDE_DIRS}
     .)
 
 add_executable(client ${CLIENT_SRC} ${CLIENT_HEADER})
-target_link_libraries(client ${Boost_LIBRARIES} ${OPENCL_LIBRARIES} clBLAS)
+target_link_libraries(client  ${ACML_LIBRARIES} ${Boost_LIBRARIES} ${OPENCL_LIBRARIES} clBLAS)
 set_target_properties( client PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/staging"
   OUTPUT_NAME clBLAS-client )
