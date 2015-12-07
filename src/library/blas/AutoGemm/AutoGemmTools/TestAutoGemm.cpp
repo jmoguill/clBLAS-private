@@ -1,3 +1,4 @@
+#include <iostream>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -15,6 +16,7 @@
 
 #include "AutoGemmUtil.h"
 
+
 #if 0
 // from clBLAS.h
 typedef enum clblasOrder_ {
@@ -30,8 +32,8 @@ typedef enum clblasTranspose_ {
 } clblasTranspose;
 #endif
 
-#define SGEMM 0
-#define DGEMM 1
+#define SGEMM 1
+#define DGEMM 0
 #define CGEMM 0
 #define ZGEMM 0
 
@@ -80,78 +82,9 @@ const unsigned int numKernels = zgemmNumKernels;
     assert(false); \
   }
 
+#include "CommonTesting.h"
 
-template<typename T>
-void
-randomMatrix(
-    clblasOrder order,
-    size_t rows,
-    size_t columns,
-    T *A,
-    size_t lda)
-{
-    size_t r, c;
-    MatrixAccessor<T> a(A, order, clblasNoTrans, rows, columns, lda);
 
-    for (r = 0; r < rows; r++) {
-        for (c = 0; c < columns; c++) {
-#if RANDOM_DATA
-            a[r][c] = random<T>();
-#else
-            a[r][c] = DATA_TYPE_CONSTRUCTOR(1, 0);
-#endif
-        }
-    }
-}
-
-template<typename T>
-bool
-compareMatrices(
-    clblasOrder order,
-    size_t rows,
-    size_t columns,
-    T *blasMatrix,
-    T *naiveMatrix,
-    size_t ld)
-{
-    size_t r, c;
-    MatrixAccessor<T> blas(blasMatrix, order, clblasNoTrans, rows, columns, ld);
-    MatrixAccessor<T> naive(naiveMatrix, order, clblasNoTrans, rows, columns, ld);
-    T blasVal, naiveVal;
-    int numPrint = 96*96;
-    bool equal = true;
-    for (r = 0; r < rows; r++) {
-        for (c = 0; c < columns; c++) {
-            blasVal = blas[r][c];
-            naiveVal = naive[r][c];
-            if (isNAN(blasVal) && isNAN(naiveVal)) {
-                continue;
-            }
-            if (blasVal != naiveVal) {
-              equal = false;
-            }
-            
-            if (blasVal != naiveVal) {
-              if (numPrint-- > 0) {
-#if CGEMM || ZGEMM
-                printf("MISMATCH C[%u][%u]: gpu= %4.1f + %4.1fi, cpu= %4.1f + %4.1fi\n",
-                  r, c,
-                  blasVal.s[0], blasVal.s[1],
-                  naiveVal.s[0], naiveVal.s[1] );
-#else
-                printf("MISMATCH C[%u][%u]: gpu= %4.1f, cpu= %4.1f\n",
-                  r, c,
-                  blasVal,
-                  naiveVal );
-#endif
-              } else {
-                return equal;
-              }
-            }
-        }
-    }
-    return equal;
-}
 
 
 const char PLATFORM_NAME[] = "AMD Accelerated Parallel Processing";
@@ -190,12 +123,6 @@ const unsigned int numEnqueuesPerFlush = 2;
 const unsigned int numFlushesPerFinish = 2;
 const unsigned int numFinishes = 2;
 #endif
-
-cl_platform_id getPlatform(const char *name);
-cl_device_id getDevice(cl_platform_id platform, const char *name);
-cl_kernel createKernel(const char *source, cl_context context,
-    const char* options, cl_int *error);
-
 
 
 void testKernelParameterCombination(
@@ -318,7 +245,8 @@ void testKernelParameterCombination(
 
     platform = getPlatform(PLATFORM_NAME);
     assert(platform != NULL);
-    device = getDevice(platform, DEVICE_NAME);
+    //device = getDevice(platform, DEVICE_NAME);
+    device = getPlatformDevice();
     assert(device != NULL);
     props[1] = (cl_context_properties)platform;
     context = clCreateContext(props, 1, &device, NULL, NULL, &err);
@@ -343,6 +271,19 @@ void testKernelParameterCombination(
 #if DO_VALIDATION
     //printf("Running naive gemm.\n");
     gemm(order, transA, transB, M, N, K, alpha, A + offA, lda, B + offB, ldb, beta, naiveC + offC, ldc);
+    //sgemm(order, transA, transB, M, N, K, alpha, A + offA, lda, B + offB, ldb, beta, naiveC + offC, ldc);
+
+    char Atrans = 'N';
+    char Btrans = 'N';
+    if (transAInt) {
+        Atrans = 'T'; 
+    }
+    if (transBInt) {
+        Btrans = 'T';
+    }
+
+    //sgemm(Atrans, Btrans, M, N, K, alpha, A + offA, lda, B + offB, ldb, beta, naiveC + offC, ldc);
+
 #endif
     bufA = clCreateBuffer(context, CL_MEM_READ_ONLY,
         (offA + numRowsA * numColsA) * sizeof(*A), NULL, &err);
@@ -721,7 +662,7 @@ void testKernelParameterCombination(
         printf("%s", tileKernelSource );
     }
     fflush(stdout);
-    system("PAUSE");
+    //system("PAUSE");
 #endif
 
     err = clReleaseMemObject(bufA); CL_CHECK(err);
@@ -759,7 +700,7 @@ int main(void) {
 #endif
   }
 
-
+  //verify all the kernels
   for (unsigned int kernelIdx = 0; kernelIdx < numKernels; kernelIdx++) {
     printf("kernelIdx = %u\n", kernelIdx);
     /* {isColumnMajor, transA, transB, betaNonZero, wgNumRows, wgNumCols, mtNumRows, mtNumCols, }*/
@@ -788,13 +729,14 @@ int main(void) {
   } // end for
 #else
   
+    //Verfify particular configuration
     unsigned int columnMajor = 1;
     unsigned int transA = 0;
     unsigned int transB = 1;
     unsigned int beta = 0;
-    unsigned int macroTileNumRows = 16*4;
-    unsigned int macroTileNumCols = 16*4;
-    unsigned int unroll = 8;
+    unsigned int macroTileNumRows = 16*6;
+    unsigned int macroTileNumCols = 16*6;
+    unsigned int unroll = 16;
     unsigned int mSpill = 0;
     unsigned int nSpill = 0;
 
@@ -803,7 +745,7 @@ int main(void) {
       columnMajor,
       transA,
       transB,
-      true,
+      beta,
       macroTileNumRows,
       macroTileNumCols,
       unroll,
@@ -819,177 +761,4 @@ int main(void) {
 };
 
 
-cl_platform_id
-getPlatform(const char *name)
-{
-    cl_int err;
-    cl_uint nrPlatforms, i;
-    cl_platform_id *list, platform;
-    char platformName[64];
-
-    err = clGetPlatformIDs(0, NULL, &nrPlatforms);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        return NULL;
-    }
-
-    list = (cl_platform_id*)malloc(nrPlatforms * sizeof(*list));
-    if (list == NULL) {
-        return NULL;
-    }
-
-    err = clGetPlatformIDs(nrPlatforms, list, NULL);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        free(list);
-        return NULL;
-    }
-
-    platform = NULL;
-    for (i = 0; i < nrPlatforms; i++) {
-        err = clGetPlatformInfo(list[i], CL_PLATFORM_NAME,
-            sizeof(platformName), platformName, NULL);
-        assert(err == CL_SUCCESS);
-        if ((err == CL_SUCCESS) && (strcmp(platformName, name) == 0)) {
-            platform = list[i];
-            break;
-        }
-    }
-
-    free(list);
-    return platform;
-}
-
-cl_device_id
-getDevice(
-    cl_platform_id platform,
-    const char *name)
-{
-
-    cl_int err;
-    cl_uint nrDevices, i;
-    cl_device_id *list, device;
-    char deviceName[64];
-
-    err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, NULL, &nrDevices);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        return NULL;
-    }
-    list = (cl_device_id*)malloc(nrDevices * sizeof(*list));
-    assert(list);
-    if (list == NULL) {
-        return NULL;
-    }
-
-    err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, nrDevices, list, NULL);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        free(list);
-        return NULL;
-    }
-
-    device = NULL;
-    for (i = 0; i < nrDevices; i++) {
-        err = clGetDeviceInfo(list[i], CL_DEVICE_NAME,
-            sizeof(deviceName), deviceName, NULL);
-        assert(err == CL_SUCCESS);
-        if ((err == CL_SUCCESS) && (strcmp(deviceName, name) == 0)) {
-            device = list[i];
-            break;
-        }
-    }
-
-    free(list);
-    return device;
-}
-
-cl_kernel
-createKernel(
-    const char* source,
-    cl_context context,
-    const char* options,
-    cl_int* error)
-{
-
-  printf("BuildOptions: %s\n", options );
-
-  //printf("Kernel Source:\n%s", source );
-  cl_int err;
-  cl_device_id device;
-  cl_program program;
-  cl_kernel kernel;
-  size_t logSize;
-  char *log;
-
-    err = clGetContextInfo(context, CL_CONTEXT_DEVICES, sizeof(device), &device, NULL);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        if (error != NULL) {
-            *error = err;
-        }
-        return NULL;
-    }
-
-    program = clCreateProgramWithSource(context, 1, &source, NULL, &err);
-    assert(err == CL_SUCCESS);
-    assert(program != NULL);
-    if (program == NULL) {
-      if (error != NULL) {
-            *error = err;
-      }
-      return NULL;
-    }
-
-    err = clBuildProgram(program, 1, &device, options, NULL, NULL);
-    if (err != CL_SUCCESS) {
-        logSize = 0;
-        clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
-        log = (char*)malloc(logSize + 1);
-        clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, logSize, log, NULL);
-        printf("=== Build Log [%lu]===\n%s\n", logSize, log);
-        free(log);
-    }
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        clReleaseProgram(program);
-        if (error != NULL) {
-            *error = err;
-        }
-        return NULL;
-    }
-
-    kernel = NULL;
-    cl_uint num_kernels_ret;
-    err = clCreateKernelsInProgram(program, 0, NULL, &num_kernels_ret);
-    err = clCreateKernelsInProgram(program, 1, &kernel, NULL);
-    assert(err == CL_SUCCESS);
-    assert(kernel != NULL);
-    clReleaseProgram(program);
-
-    // kernel name
-    size_t length;
-    char kernelName[64];
-    err = clGetKernelInfo(
-      kernel,
-      CL_KERNEL_FUNCTION_NAME,
-      64,
-      kernelName,
-      &length );
-    printf("KernelName[%lu]: %s\n", length, kernelName);
-
-    // kernel arguments
-    cl_uint numArguments;
-    err = clGetKernelInfo(
-      kernel,
-      CL_KERNEL_NUM_ARGS,
-      sizeof(numArguments),
-      &numArguments,
-      NULL );
-
-    if (error != NULL) {
-        *error = err;
-    }
-    return kernel;
-}
 

@@ -15,14 +15,14 @@
 #endif
 //#include "library/tools/ktest/naive/naive_blas.cpp"
 //using namespace NaiveBlas;
-#include "AutoGemmTools/AutoGemmUtil.h"
+#include "AutoGemmUtil.h"
 
 #include "AutoGemmIncludes/AutoGemmKernelSelection.h"
 #include "AutoGemmIncludes/AutoGemmKernelSelectionSpecific.h"
 #include "AutoGemmIncludes/AutoGemmKernelEnumeration.h"
 
-#define SGEMM 1
-#define DGEMM 0
+#define SGEMM 0
+#define DGEMM 1
 #define CGEMM 0
 #define ZGEMM 0
 
@@ -42,7 +42,7 @@ const char * const rawFileName = "prof_user_sgemm_raw.csv";
 const char * const ksrFileName = "prof_sgemm_ksr.txt";
 const char * const rawFileName = "prof_sgemm_raw.csv";
 #endif
-unsigned int systemSizeMax = 1000;
+unsigned int systemSizeMax = 5000;
 #endif
 
 #if DGEMM
@@ -58,7 +58,7 @@ const char * const rawFileName = "prof_user_dgemm_raw.csv";
 const char * const ksrFileName = "prof_dgemm_ksr.txt";
 const char * const rawFileName = "prof_dgemm_raw.csv";
 #endif
-unsigned int systemSizeMax = 6000;
+unsigned int systemSizeMax = 5000;
 #endif
 
 #if CGEMM
@@ -74,7 +74,7 @@ const char * const rawFileName = "prof_user_cgemm_raw.csv";
 const char * const ksrFileName = "prof_cgemm_ksr.txt";
 const char * const rawFileName = "prof_cgemm_raw.csv";
 #endif
-unsigned int systemSizeMax = 5500;
+unsigned int systemSizeMax = 5000;
 #endif
 
 #if ZGEMM
@@ -90,7 +90,7 @@ const char * const rawFileName = "prof_user_zgemm_raw.csv";
 const char * const ksrFileName = "prof_zgemm_ksr.txt";
 const char * const rawFileName = "prof_zgemm_raw.csv";
 #endif
-unsigned int systemSizeMax = 5000;
+unsigned int systemSizeMax = 3599;
 #endif
 
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -103,6 +103,7 @@ unsigned int systemSizeMax = 5000;
     assert(false); \
   }
 
+#include "CommonTesting.h"
 
 unsigned int **tiles;
 
@@ -282,35 +283,6 @@ public:
 
 
 
-
-
-
-
-
-
-template<typename T>
-void
-randomMatrix(
-    clblasOrder order,
-    size_t rows,
-    size_t columns,
-    T *A,
-    size_t lda)
-{
-    size_t r, c;
-    MatrixAccessor<T> a(A, order, clblasNoTrans, rows, columns, lda);
-
-    for (r = 0; r < rows; r++) {
-        for (c = 0; c < columns; c++) {
-#if RANDOM_DATA
-            a[r][c] = random<T>();
-#else
-            a[r][c] = DATA_TYPE_CONSTRUCTOR(1, 0);
-#endif
-        }
-    }
-}
-
 /******************************************************************************
  * Make Gemm Kernel
  *****************************************************************************/
@@ -416,54 +388,6 @@ void makeGemmKernel(
 /****************************************************************************
  * Compare Matrices
  ***************************************************************************/
-template<typename T>
-bool
-compareMatrices(
-    clblasOrder order,
-    size_t rows,
-    size_t columns,
-    T *blasMatrix,
-    T *naiveMatrix,
-    size_t ld)
-{
-    size_t r, c;
-    MatrixAccessor<T> blas(blasMatrix, order, clblasNoTrans, rows, columns, ld);
-    MatrixAccessor<T> naive(naiveMatrix, order, clblasNoTrans, rows, columns, ld);
-    T blasVal, naiveVal;
-    int numPrint = 96*96;
-    bool equal = true;
-    for (r = 0; r < rows; r++) {
-        for (c = 0; c < columns; c++) {
-            blasVal = blas[r][c];
-            naiveVal = naive[r][c];
-            if (isNAN(blasVal) && isNAN(naiveVal)) {
-                continue;
-            }
-            if (blasVal != naiveVal) {
-              equal = false;
-            }
-
-            if (blasVal != naiveVal) {
-              if (numPrint-- > 0) {
-#if CGEMM || ZGEMM
-                printf("MISMATCH C[%u][%u]: gpu= %4.1f + %4.1fi, cpu= %4.1f + %4.1fi\n",
-                  r, c,
-                  blasVal.s[0], blasVal.s[1],
-                  naiveVal.s[0], naiveVal.s[1] );
-#else
-                printf("MISMATCH C[%u][%u]: gpu= %4.1f, cpu= %4.1f\n",
-                  r, c,
-                  blasVal,
-                  naiveVal );
-#endif
-              } else {
-                return equal;
-              }
-            }
-        }
-    }
-    return equal;
-}
 
 
 const char PLATFORM_NAME[] = "AMD Accelerated Parallel Processing";
@@ -500,16 +424,12 @@ const unsigned int numEnqueuesPerFlush = 1;
 const unsigned int numFlushesPerFinish = 1;
 const unsigned int numFinishes = 1;
 #else
-const unsigned int numEnqueuesPerFlush = 10;
+const unsigned int numEnqueuesPerFlush = 1;//number of kernels to enque  
 const unsigned int numFlushesPerFinish = 1;
-const unsigned int numFinishes = 1;
+const unsigned int numFinishes = 5;
 #endif
 
 char* loadFile(const char* path);
-cl_platform_id getPlatform(const char *name);
-cl_device_id getDevice(cl_platform_id platform);
-cl_kernel createKernel(const char *source, cl_context context,
-    const char* options, cl_int *error);
 
 
 cl_int err;
@@ -536,6 +456,12 @@ float benchmarkKernel(
   size_t K
   ) {
 
+    // avoid 4096 which is extremely slow
+    if (M % 1024 == 0) M -= 1; 
+    if (N % 1024 == 0) N -= 1;
+    if (K % 1024 == 0) K -= 1;
+
+  
 
   DATA_TYPE beta;
   if (betaNonZero) {
@@ -550,7 +476,7 @@ float benchmarkKernel(
   bool needCornerKernel = M%macroTileNumRows > 0 && N%macroTileNumCols > 0;
 
 
-#if 0
+#if 1
   printf("Testing: %sgemm_%s_%s%s_%s_%03u_%03u_%02u\n",
 #if SGEMM
     "s",
@@ -781,6 +707,8 @@ float benchmarkKernel(
   cl_event kernelEvents[numEnqueuesPerFlush * numFlushesPerFinish * numFinishes * 4];
   unsigned int kernelIdx = 0;
   //printf("Launching %u kernels of %u x %u threads\n", totalEnqueues, globalWorkSize[0], globalWorkSize[1]);
+
+  // start timer
   for (unsigned int finishIdx = 0; finishIdx < numFinishes; finishIdx++) {
     for (unsigned int flushIdx = 0; flushIdx < numFlushesPerFinish; flushIdx++) {
       for (unsigned int enqIdx = 0; enqIdx < numEnqueuesPerFlush; enqIdx++) {
@@ -822,12 +750,15 @@ float benchmarkKernel(
     err = clFinish(queue);
     CL_CHECK(err);
   }
+  
 
+  // end timer
   cl_ulong totalNs = 0;
-  cl_ulong totalFlops = (size_t) numEnqueuesPerFlush * numFlushesPerFinish * numFinishes * (2 * M * N * K);
+  double MtotalFlops = (double) numEnqueuesPerFlush * numFlushesPerFinish * numFinishes * (2 * M * N * K)/1e6;
+  printf("MtotalFlops=%lux%lux%lu * (2*%lu*%lu*%lu) = %lf\n", numEnqueuesPerFlush, numFlushesPerFinish, numFinishes, M, N, K, MtotalFlops);
 #if CGEMM || ZGEMM
       // complex
-      totalFlops *= 4;
+      MtotalFlops *= 4;
 #endif
 
     cl_ulong start, end;
@@ -839,9 +770,13 @@ float benchmarkKernel(
         sizeof(end), &end, NULL);
       CL_CHECK(err);
       cl_ulong timeNs = end - start;
+	  printf("%lu ns + %lu ns (kernel ID %d) = %lu ns\n", totalNs, timeNs, kernelIdx, totalNs+timeNs);
       totalNs += timeNs;
     }
-    double gFlops = (1.0*totalFlops) / (1.0*totalNs);
+    if (totalNs <= 0) printf("error in testing, totalNs is %lu ns\n", totalNs);
+ 
+    double gFlops = (1.0*MtotalFlops) / (1.0*(totalNs/1e6));
+	printf("gFlops=%f\n", gFlops);
     return gFlops;
 }
 
@@ -850,7 +785,8 @@ float benchmarkKernel(
 /****************************************************************************
  * Main
  ***************************************************************************/
-int main(void) {
+int main(void) 
+{
   file.open(rawFileName, std::ios_base::out); // or ::app for append
   file << "M, N, ";
   bool printDetails = true;
@@ -878,7 +814,7 @@ int main(void) {
     unsigned int *tile = tiles[tileIdx];
     file << tile[0] << "x" << tile[1] << ", ";
   }
-  file << "fallback, fastest, would-be valid tiles\n";
+  file << "fallback, fastest score, fastest ID, other valid tiles\n";
 
 
   int *fallbackBegin = new int[numTiles]; // size at which tile starts being fallback
@@ -895,10 +831,12 @@ int main(void) {
          validEnd[i] = -1;
   }
 
+
   platform = getPlatform(PLATFORM_NAME);
   assert(platform != NULL);
-  device = getDevice(platform);
+  device = getPlatformDevice();
   assert(device != NULL);
+
   props[1] = (cl_context_properties)platform;
   context = clCreateContext(props, 1, &device, NULL, NULL, &err);
   assert(context != NULL);
@@ -982,6 +920,7 @@ int main(void) {
   C = (DATA_TYPE*)malloc((offC + numRowsC * numColsC) * sizeof(*C));
   assert(C != NULL);
   randomMatrix(order, numRowsC, numColsC, C + offC, ldc);
+
   bufA = clCreateBuffer(context, CL_MEM_READ_ONLY,
       (offA + numRowsA * numColsA) * sizeof(*A), NULL, &err);
   CL_CHECK(err);
@@ -991,6 +930,7 @@ int main(void) {
       0, NULL, NULL);
   CL_CHECK(err);
   assert(err == CL_SUCCESS);
+  
   bufB = clCreateBuffer(context, CL_MEM_READ_ONLY,
       (offB + numRowsB * numColsB) * sizeof(*B), NULL, &err);
   CL_CHECK(err);
@@ -1095,6 +1035,8 @@ int main(void) {
       /**************************************************************
        * (7) get fastest fallback speed for this system size
        *************************************************************/
+      float Winer = -1.f;
+
       float fastestFallbackScore = 0;
       unsigned int fastestFallbackIdx = 0;
       for (unsigned int tileIdx = 0; tileIdx < numTiles; tileIdx++) {
@@ -1103,6 +1045,8 @@ int main(void) {
           fastestFallbackIdx = tileIdx;
         }
       }
+      Winer = fastestFallbackScore;
+
       file << tiles[fastestFallbackIdx][0] << "x" << tiles[fastestFallbackIdx][1] << ", ";
 
       /**************************************************************
@@ -1121,7 +1065,8 @@ int main(void) {
        *************************************************************/
       unsigned int numValidTiles = 0;
       float priorFastestTileScore = 99999999;
-      for (unsigned int checkIter = 0; checkIter < numTiles; checkIter++) {
+      for (unsigned int checkIter = 0; checkIter < numTiles; checkIter++) 
+      {
         // find the next fastest tile
         float fastestTileScore = -1.f;
         int fastestTileIdx = -1;
@@ -1131,10 +1076,13 @@ int main(void) {
             fastestTileIdx = tileIdx;
           }
         }
-        priorFastestTileScore = fastestTileScore;
 
+        Winer = fmax(Winer, fastestTileScore);
+
+        priorFastestTileScore = fastestTileScore;
         // if next fastest tile isn't faster than fallback, then quit
         if (fastestTileScore < fastestFallbackScore-1) break;
+
 
         // if the coverage of this tile is already handled by prior (faster) valid tiles, then skip it
         bool uniqueCoverage = true;
@@ -1152,10 +1100,14 @@ int main(void) {
         validTiles[numValidTiles] = fastestTileIdx;
         numValidTiles++;
       }
+
+      file << Winer << ",";
+
       for (unsigned int i = 0; i < numValidTiles; i++) {
         file << tiles[validTiles[i]][0] << "x" << tiles[validTiles[i]][1] << ", ";
       }
 
+      
       ksr.add(M, N, validTiles, numValidTiles, fastestFallbackIdx );
 
       // for now, just pay attention to the fastest tile
@@ -1188,6 +1140,7 @@ int main(void) {
       //    validBegin[i], validEnd[i] );
       //}
       //printf("\n");
+
       file << "\n";
 
 
@@ -1195,18 +1148,29 @@ int main(void) {
 
   file.close();
   ksrFile.close();
-    //err = clReleaseMemObject(bufA); CL_CHECK(err);
-    //err = clReleaseMemObject(bufB); CL_CHECK(err);
-    //err = clReleaseMemObject(bufC); CL_CHECK(err);
-    //err = clReleaseKernel(kernel); CL_CHECK(err);
-    //err = clReleaseCommandQueue(queue); CL_CHECK(err);
-    //err = clReleaseContext(context); CL_CHECK(err);
 
-    //free(A);
-    //free(B);
-    //free(C);
-    //free(naiveC);
-    //free(source);
+  free(tiles);
+
+  free(fallbackBegin);
+  free(fallbackEnd); 
+  free(validBegin);
+  free(validEnd);
+  free(fallbackScore); 
+  free(tileScore); 
+  free(validTiles);
+
+  err = clReleaseMemObject(bufA); CL_CHECK(err);
+  err = clReleaseMemObject(bufB); CL_CHECK(err);
+  err = clReleaseMemObject(bufC); CL_CHECK(err);
+  //err = clReleaseKernel(kernel); CL_CHECK(err);
+  err = clReleaseCommandQueue(queue); CL_CHECK(err);
+  err = clReleaseContext(context); CL_CHECK(err);
+
+  free(A);
+  free(B);
+  free(C);
+  //free(naiveC);
+  //free(source);
 
     //system("PAUSE");
     //Sleep(5000); // ms
@@ -1214,179 +1178,3 @@ int main(void) {
 };
 
 
-cl_platform_id
-getPlatform(const char *name)
-{
-    cl_int err;
-    cl_uint nrPlatforms, i;
-    cl_platform_id *list, platform;
-    char platformName[64];
-
-    err = clGetPlatformIDs(0, NULL, &nrPlatforms);
-    CL_CHECK(err);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        return NULL;
-    }
-
-    list = (cl_platform_id*)malloc(nrPlatforms * sizeof(*list));
-    if (list == NULL) {
-        return NULL;
-    }
-
-    err = clGetPlatformIDs(nrPlatforms, list, NULL);
-    CL_CHECK(err);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        free(list);
-        return NULL;
-    }
-
-    platform = NULL;
-    for (i = 0; i < nrPlatforms; i++) {
-        err = clGetPlatformInfo(list[i], CL_PLATFORM_NAME,
-            sizeof(platformName), platformName, NULL);
-    CL_CHECK(err);
-        assert(err == CL_SUCCESS);
-        if ((err == CL_SUCCESS) && (strcmp(platformName, name) == 0)) {
-            platform = list[i];
-            break;
-        }
-    }
-
-    free(list);
-
-    return platform;
-}
-
-cl_device_id
-getDevice(
-    cl_platform_id platform)
-{
-
-    cl_int err;
-    cl_uint nrDevices, i;
-    cl_device_id *list, device;
-    char deviceName[64];
-
-    err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, NULL, &nrDevices);
-    CL_CHECK(err);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        return NULL;
-    }
-    assert( nrDevices > 0 );
-    list = (cl_device_id*)malloc(nrDevices * sizeof(*list));
-    assert(list);
-    if (list == NULL) {
-      printf("Error: malloc device list\n");
-        return NULL;
-    }
-
-    err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, nrDevices, list, NULL);
-    CL_CHECK(err);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        free(list);
-        return NULL;
-    }
-
-    device = NULL;
-    for (i = 0; i < nrDevices; i++) {
-        err = clGetDeviceInfo(list[i], CL_DEVICE_NAME,
-            sizeof(deviceName), deviceName, NULL);
-        CL_CHECK(err);
-        assert(err == CL_SUCCESS);
-        if ((err == CL_SUCCESS) ) {
-            device = list[i];
-            break;
-        }
-    }
-
-    free(list);
-    return device;
-}
-
-cl_kernel
-createKernel(
-    const char* source,
-    cl_context context,
-    const char* options,
-    cl_int* error)
-{
-  //printf("Kernel Source:\n%s", source );
-  cl_int err;
-  cl_device_id device;
-  cl_program program;
-  cl_kernel kernel;
-  size_t logSize;
-  char *log;
-
-    err = clGetContextInfo(context, CL_CONTEXT_DEVICES, sizeof(device), &device, NULL);
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        if (error != NULL) {
-            *error = err;
-        }
-        return NULL;
-    }
-
-    program = clCreateProgramWithSource(context, 1, &source, NULL, &err);
-    assert(err == CL_SUCCESS);
-    assert(program != NULL);
-    if (program == NULL) {
-      if (error != NULL) {
-            *error = err;
-      }
-      return NULL;
-    }
-
-    err = clBuildProgram(program, 1, &device, options, NULL, NULL);
-    if (err != CL_SUCCESS) {
-        logSize = 0;
-        clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
-        log = (char*)malloc(logSize + 1);
-        clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, logSize, log, NULL);
-        printf("=== Build Log [%lu]===\n%s\n", logSize, log);
-        free(log);
-    }
-    assert(err == CL_SUCCESS);
-    if (err != CL_SUCCESS) {
-        clReleaseProgram(program);
-        if (error != NULL) {
-            *error = err;
-        }
-        return NULL;
-    }
-
-    kernel = NULL;
-    err = clCreateKernelsInProgram(program, 1, &kernel, NULL);
-    assert(err == CL_SUCCESS);
-    assert(kernel != NULL);
-    clReleaseProgram(program);
-
-    // kernel name
-    size_t length;
-    char kernelName[64];
-    err = clGetKernelInfo(
-      kernel,
-      CL_KERNEL_FUNCTION_NAME,
-      64,
-      kernelName,
-      &length );
-    //printf("KernelName[%lu]: %s\n", length, kernelName);
-
-    // kernel arguments
-    cl_uint numArguments;
-    err = clGetKernelInfo(
-      kernel,
-      CL_KERNEL_NUM_ARGS,
-      sizeof(numArguments),
-      &numArguments,
-      NULL );
-
-    if (error != NULL) {
-        *error = err;
-    }
-    return kernel;
-}

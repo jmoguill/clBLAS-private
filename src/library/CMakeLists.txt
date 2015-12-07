@@ -42,6 +42,10 @@ set(AUTOGEMM_HEADERS
   ${CMAKE_BINARY_DIR}/include/AutoGemmIncludes/AutoGemmKernelSources.h
 )
 
+set(COMMON_HEADERS
+  ${CMAKE_SOURCE_DIR}/library/blas/AutoGemm/AutoGemmTools/CommonTesting.h
+)
+
 set(AUTOGEMM_SRC
   ${CMAKE_BINARY_DIR}/include/AutoGemmIncludes/AutoGemmClKernels.cpp
   ${CMAKE_BINARY_DIR}/include/AutoGemmIncludes/AutoGemmKernelBuildOptionsBinary.cpp
@@ -61,8 +65,13 @@ set(USERGEMM_HEADERS
    ${CMAKE_SOURCE_DIR}/library/blas/AutoGemm/UserGemmKernelSources/UserGemmClKernels.h
 )
 
+set(AUTOGEMM_COMMON_SRC
+  ${CMAKE_SOURCE_DIR}/library/blas/AutoGemm/AutoGemmTools/CommonTesting.cpp
+)
+
 set(AUTOGEMM_TEST_SRC
   ${CMAKE_SOURCE_DIR}/library/blas/AutoGemm/AutoGemmTools/TestAutoGemm.cpp
+  ${CMAKE_SOURCE_DIR}/library/blas/AutoGemm/AutoGemmTools/TestingGemm.cpp
 )
 set(AUTOGEMM_PROFILER_SRC
   ${CMAKE_SOURCE_DIR}/library/blas/AutoGemm/AutoGemmTools/ProfileAutoGemm.cpp
@@ -208,6 +217,8 @@ add_executable(AutoGemm_PreCompile_Bin
   ${AUTOGEMM_PRECOMPILE_SRC}
   ${AUTOGEMM_PRECOMPILE_HEADER_OUT}
   ${AUTOGEMM_HEADERS}
+  ${COMMON_HEADERS}
+  ${AUTOGEMM_COMMON_SRC}
   ${AUTOGEMM_SRC}
   ${AUTOGEMM_SCRIPTS}
   )
@@ -255,8 +266,10 @@ include_directories(
 ################################################################################
 add_executable(AutoGemm_Tools_Test
   ${AUTOGEMM_TEST_SRC}
+  ${AUTOGEMM_COMMON_SRC}
   ${AUTOGEMM_SRC}
   ${AUTOGEMM_HEADERS}
+  ${COMMON_HEADERS}
   ${AUTOGEMM_SCRIPTS}
   )
 target_link_libraries(AutoGemm_Tools_Test ${OPENCL_LIBRARIES})
@@ -271,8 +284,10 @@ set_target_properties(
 
 add_executable(AutoGemm_Tools_Profile
   ${AUTOGEMM_PROFILER_SRC}
+  ${AUTOGEMM_COMMON_SRC}
   ${AUTOGEMM_SRC}
   ${AUTOGEMM_HEADERS}
+  ${COMMON_HEADERS}
   ${AUTOGEMM_SCRIPTS}
   )
 target_link_libraries(AutoGemm_Tools_Profile ${OPENCL_LIBRARIES})
@@ -286,6 +301,7 @@ set_target_properties(
 
 source_group(AutoGemm\\scripts FILES ${AUTOGEMM_SCRIPTS} )
 source_group(AutoGemm\\include FILES ${AUTOGEMM_HEADERS} )
+source_group(AutoGemm\\include FILES ${COMMON_HEADERS} )
 source_group(AutoGemm\\src FILES ${AUTOGEMM_SRC} ${AUTOGEMM_PRECOMPILED_KERNELS} )
 
 ################################################################################
@@ -847,6 +863,7 @@ add_library(clBLAS
     ${SRC_BLAS_GENS_HEADERS}
     ${AUTOGEMM_SRC}
     ${AUTOGEMM_HEADERS}
+    ${COMMON_HEADERS}
     ${AUTOGEMM_SCRIPTS}
     ${AUTOGEMM_PRECOMPILED_KERNELS_CONDITIONAL}
 	#${USERGEMM_SRC}
