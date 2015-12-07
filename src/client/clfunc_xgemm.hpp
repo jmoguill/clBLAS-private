@@ -21,6 +21,19 @@
 #define CLBLAS_BENCHMARK_XGEMM_HXX__
 
 #include "clfunc_common.hpp"
+#include <acml.h>
+#include "common.h"
+
+char
+encodeTranspose(clblasTranspose value)
+{
+    switch (value) {
+    case clblasNoTrans:      return 'N';
+    case clblasTrans:        return 'T';
+    case clblasConjTrans:    return 'C';
+    }
+    return '\0';
+}
 
 template <typename T>
 struct xGemmBuffer
@@ -35,17 +48,18 @@ struct xGemmBuffer
     size_t offA_;
     size_t offB_;
     size_t offC_;
-    size_t a_num_vectors_;
-    size_t b_num_vectors_;
-    size_t c_num_vectors_;
-    clblasTranspose trans_a_;
-    clblasTranspose trans_b_;
-    T* a_;
-    T* b_;
-    T* c_;
-    cl_mem buf_a_;
-    cl_mem buf_b_;
-    cl_mem buf_c_;
+    size_t a_num_vector;
+    size_t b_num_vector;
+    size_t c_num_vector;
+    clblasTranspose transA;
+    clblasTranspose transB;
+    T* hA;
+    T* hB;
+    T* hC;
+    T* hR;
+    cl_mem dA;
+    cl_mem dB;
+    cl_mem dC;
     T alpha_;
     T beta_;
 	cl_uint apiCallCount;
@@ -69,18 +83,20 @@ public:
     void call_func()
     {
 		timer.Start(timer_id);
-		xGemm_Function(true, buffer_.apiCallCount);
+		xGemm_Function(true, buffer.apiCallCount);
 		timer.Stop(timer_id);
+        //read_gpu_buffer();
+        //verfication();
     }
 
     double gflops()
     {
-		return (2.0*buffer_.m_*buffer_.n_*buffer_.k_) / (time_in_ns() / buffer_.apiCallCount);
+		return (2.0*buffer.m_*buffer.n_*buffer.k_) / (time_in_ns() / buffer.apiCallCount);
     }
 
 	void setup_apiCallCount(cl_uint apiCallCount)
 	{
-		buffer_.apiCallCount = apiCallCount;
+		buffer.apiCallCount = apiCallCount;
 	}
     std::string gflops_formula()
     {
@@ -97,23 +113,23 @@ public:
 
         initialize_scalars(alpha, beta);
 
-        buffer_.m_ = M;
-        buffer_.n_ = N;
-        buffer_.k_ = K;
-        buffer_.offA_ = offA;
-        buffer_.offB_ = offBX;
-        buffer_.offC_ = offCY;
+        buffer.m_ = M;
+        buffer.n_ = N;
+        buffer.k_ = K;
+        buffer.offA_ = offA;
+        buffer.offB_ = offBX;
+        buffer.offC_ = offCY;
 
         if (order_option == 0)
         {
             order_ = clblasRowMajor;
             if (transA_option == 0)
             {
-                buffer_.trans_a_ = clblasNoTrans;
-                buffer_.a_num_vectors_ = M;
+                buffer.transA = clblasNoTrans;
+                buffer.a_num_vector = M;
                 if (lda == 0)
                 {
-                    buffer_.lda_ = K;
+                    buffer.lda_ = K;
                 }
                 else if (lda < K)
                 {
@@ -122,23 +138,23 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
             else
             {
-                buffer_.a_num_vectors_ = K;
+                buffer.a_num_vector = K;
                 if (transA_option == 1)
                 {
-                    buffer_.trans_a_ = clblasTrans;
+                    buffer.transA = clblasTrans;
                 }
                 else if (transA_option == 2)
                 {
-                    buffer_.trans_a_ = clblasConjTrans;
+                    buffer.transA = clblasConjTrans;
                 }
                 if (lda == 0)
                 {
-                    buffer_.lda_ = M;
+                    buffer.lda_ = M;
                 }
                 else if (lda < M)
                 {
@@ -147,17 +163,17 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
 
             if (transB_option == 0)
             {
-                buffer_.b_num_vectors_ = K;
-                buffer_.trans_b_ = clblasNoTrans;
+                buffer.b_num_vector = K;
+                buffer.transB = clblasNoTrans;
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = N;
+                    buffer.ldb_ = N;
                 }
                 else if (ldb < N)
                 {
@@ -166,24 +182,24 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
             else
             {
-                buffer_.b_num_vectors_ = N;
+                buffer.b_num_vector = N;
                 if (transB_option == 1)
                 {
-                    buffer_.trans_b_ = clblasTrans;
+                    buffer.transB = clblasTrans;
                 }
                 else if (transB_option == 2)
                 {
-                    buffer_.trans_b_ = clblasConjTrans;
+                    buffer.transB = clblasConjTrans;
                 }
 
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = K;
+                    buffer.ldb_ = K;
                 }
                 else if (ldb < K)
                 {
@@ -192,13 +208,13 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
 
             if (ldc == 0)
             {
-                buffer_.ldc_ = N;
+                buffer.ldc_ = N;
             }
             else if (ldc < N)
             {
@@ -206,20 +222,20 @@ public:
             }
             else
             {
-                buffer_.ldc_ = ldc;
+                buffer.ldc_ = ldc;
             }
-            buffer_.c_num_vectors_ = M;
+            buffer.c_num_vector = M;
         }
         else
         {
             order_ = clblasColumnMajor;
             if (transA_option == 0)
             {
-                buffer_.a_num_vectors_ = K;
-                buffer_.trans_a_ = clblasNoTrans;
+                buffer.a_num_vector = K;
+                buffer.transA = clblasNoTrans;
                 if (lda == 0)
                 {
-                    buffer_.lda_ = M;
+                    buffer.lda_ = M;
                 }
                 else if (lda < M)
                 {
@@ -228,25 +244,25 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
             else
             {
-                buffer_.a_num_vectors_ = M;
+                buffer.a_num_vector = M;
                 if (transA_option == 1)
                 {
-                    buffer_.trans_a_ = clblasTrans;
+                    buffer.transA = clblasTrans;
                 }
                 else if (transA_option == 2)
                 {
-                    buffer_.trans_a_ = clblasConjTrans;
+                    buffer.transA = clblasConjTrans;
                 }
 
 
                 if (lda == 0)
                 {
-                    buffer_.lda_ = K;
+                    buffer.lda_ = K;
                 }
                 else if (lda < K)
                 {
@@ -255,18 +271,18 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
 
             if (transB_option == 0)
             {
-                buffer_.b_num_vectors_ = N;
-                buffer_.trans_b_ = clblasNoTrans;
+                buffer.b_num_vector = N;
+                buffer.transB = clblasNoTrans;
 
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = K;
+                    buffer.ldb_ = K;
                 }
                 else if (ldb < K)
                 {
@@ -275,24 +291,24 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
             else
             {
-                buffer_.b_num_vectors_ = K;
+                buffer.b_num_vector = K;
                 if (transB_option == 1)
                 {
-                    buffer_.trans_b_ = clblasTrans;
+                    buffer.transB = clblasTrans;
                 }
                 else if (transB_option == 2)
                 {
-                    buffer_.trans_b_ = clblasConjTrans;
+                    buffer.transB = clblasConjTrans;
                 }
 
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = N;
+                    buffer.ldb_ = N;
                 }
                 else if (ldb < N)
                 {
@@ -301,13 +317,13 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
 
             if (ldc == 0)
             {
-                buffer_.ldc_ = M;
+                buffer.ldc_ = M;
             }
             else if (ldc < M)
             {
@@ -315,28 +331,30 @@ public:
             }
             else
             {
-                buffer_.ldc_ = ldc;
+                buffer.ldc_ = ldc;
             }
-            buffer_.c_num_vectors_ = N;
+            buffer.c_num_vector = N;
         }
-        buffer_.a_ = new T[buffer_.lda_*buffer_.a_num_vectors_];
-        buffer_.b_ = new T[buffer_.ldb_*buffer_.b_num_vectors_];
-        buffer_.c_ = new T[buffer_.ldc_*buffer_.c_num_vectors_ ];
+        buffer.hA = new T[buffer.lda_*buffer.a_num_vector];
+        buffer.hB = new T[buffer.ldb_*buffer.b_num_vector];
+        buffer.hC = new T[buffer.ldc_*buffer.c_num_vector];
+        buffer.hR = new T[buffer.ldc_*buffer.c_num_vector];
+
 
         cl_int err;
-        buffer_.buf_a_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
-                                       (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
+        buffer.dA = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
+                                       (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
                                        NULL, &err);
 
-        buffer_.buf_b_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
-                                        (buffer_.ldb_ * buffer_.b_num_vectors_ +
-                                            buffer_.offB_) * sizeof(T),
+        buffer.dB = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
+                                        (buffer.ldb_ * buffer.b_num_vector +
+                                            buffer.offB_) * sizeof(T),
                                         NULL, &err);
 
-        buffer_.buf_c_ = clCreateBuffer(ctx_, CL_MEM_READ_WRITE,
-                                        (buffer_.ldc_ * buffer_.c_num_vectors_ +
-                                            buffer_.offC_) * sizeof(T),
+        buffer.dC = clCreateBuffer(ctx_, CL_MEM_READ_WRITE,
+                                        (buffer.ldc_ * buffer.c_num_vector +
+                                            buffer.offC_) * sizeof(T),
                                         NULL, &err);
 
     }
@@ -344,30 +362,31 @@ public:
     void initialize_cpu_buffer()
     {
         srand(10);
-        for (size_t i = 0; i < buffer_.a_num_vectors_; ++i)
+        for (size_t i = 0; i < buffer.a_num_vector; ++i)
         {
-            for (size_t j = 0; j < buffer_.lda_; ++j)
+            for (size_t j = 0; j < buffer.lda_; ++j)
             {
-                buffer_.a_[i*buffer_.lda_+j] = random<T>(UPPER_BOUND<T>()) /
+                buffer.hA[i*buffer.lda_+j] = random<T>(UPPER_BOUND<T>()) /
                                                randomScale<T>();
             }
         }
 
-        for (size_t i = 0; i < buffer_.b_num_vectors_; ++i)
+        for (size_t i = 0; i < buffer.b_num_vector; ++i)
         {
-            for (size_t j = 0; j < buffer_.ldb_; ++j)
+            for (size_t j = 0; j < buffer.ldb_; ++j)
             {
-                buffer_.b_[i*buffer_.ldb_+j] = random<T>(UPPER_BOUND<T>()) /
+                buffer.hB[i*buffer.ldb_+j] = random<T>(UPPER_BOUND<T>()) /
                                                randomScale<T>();
             }
         }
 
-        for (size_t i = 0; i < buffer_.c_num_vectors_; ++i)
+        for (size_t i = 0; i < buffer.c_num_vector; ++i)
         {
-            for (size_t j = 0; j < buffer_.ldc_; ++j)
+            for (size_t j = 0; j < buffer.ldc_; ++j)
             {
-                buffer_.c_[i*buffer_.ldc_+j] = random<T>(UPPER_BOUND<T>()) /
+                buffer.hR[i*buffer.ldc_ +j] = buffer.hC[i*buffer.ldc_+j] = random<T>(UPPER_BOUND<T>()) /
                                                randomScale<T>();
+
             }
         }
     }
@@ -377,23 +396,23 @@ public:
 
 		cl_int err;
 
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_a_, CL_TRUE,
-                                   buffer_.offA_ * sizeof(T),
-                                   buffer_.lda_ * buffer_.a_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dA, CL_TRUE,
+                                   buffer.offA_ * sizeof(T),
+                                   buffer.lda_ * buffer.a_num_vector *
                                        sizeof(T),
-                                   buffer_.a_, 0, NULL, NULL);
+                                   buffer.hA, 0, NULL, NULL);
 
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_b_, CL_TRUE,
-                                   buffer_.offB_ * sizeof(T),
-                                   buffer_.ldb_ * buffer_.b_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dB, CL_TRUE,
+                                   buffer.offB_ * sizeof(T),
+                                   buffer.ldb_ * buffer.b_num_vector *
                                        sizeof(T),
-                                   buffer_.b_, 0, NULL, NULL);
+                                   buffer.hB, 0, NULL, NULL);
 
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-                                   buffer_.offC_ * sizeof(T),
-                                   buffer_.ldc_ * buffer_.c_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dC, CL_TRUE,
+                                   buffer.offC_ * sizeof(T),
+                                   buffer.ldc_ * buffer.c_num_vector *
                                    sizeof(T),
-                                   buffer_.c_, 0, NULL, NULL);
+                                   buffer.hC, 0, NULL, NULL);
 
 
     }
@@ -401,159 +420,159 @@ public:
     void reset_gpu_write_buffer()
     {
         cl_int err;
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-                                   buffer_.offC_ * sizeof(T),
-                                   buffer_.ldc_ * buffer_.c_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dC, CL_TRUE,
+                                   buffer.offC_ * sizeof(T),
+                                   buffer.ldc_ * buffer.c_num_vector *
                                        sizeof(T),
-                                   buffer_.c_, 0, NULL, NULL);
+                                   buffer.hC, 0, NULL, NULL);
     }
 
 	void read_gpu_buffer()
 	{
 		cl_int err;
-		err = clEnqueueReadBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-			                      buffer_.offC_ * sizeof(T), buffer_.ldc_ * buffer_.c_num_vectors_ *
+		err = clEnqueueReadBuffer(queues_[0], buffer.dC, CL_TRUE,
+			                      buffer.offC_ * sizeof(T), buffer.ldc_ * buffer.c_num_vector *
                                        sizeof(T),
-								  buffer_.c_, 0, NULL, NULL);
+								  buffer.hC, 0, NULL, NULL);
 	}
 
 	void roundtrip_func()
 	{
-	timer.Start(timer_id);
+	    timer.Start(timer_id);
 		cl_int err;
-        buffer_.buf_a_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
-                                       (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
+        buffer.dA = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
+                                       (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
                                        NULL, &err);
 
-        buffer_.buf_b_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
-                                        (buffer_.ldb_ * buffer_.b_num_vectors_ +
-                                            buffer_.offB_) * sizeof(T),
+        buffer.dB = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
+                                        (buffer.ldb_ * buffer.b_num_vector +
+                                            buffer.offB_) * sizeof(T),
                                         NULL, &err);
 
-        buffer_.buf_c_ = clCreateBuffer(ctx_, CL_MEM_READ_WRITE,
-                                        (buffer_.ldc_ * buffer_.c_num_vectors_ +
-                                            buffer_.offC_) * sizeof(T),
+        buffer.dC = clCreateBuffer(ctx_, CL_MEM_READ_WRITE,
+                                        (buffer.ldc_ * buffer.c_num_vector +
+                                            buffer.offC_) * sizeof(T),
                                         NULL, &err);
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_a_, CL_TRUE,
-                                   buffer_.offA_ * sizeof(T),
-                                   buffer_.lda_ * buffer_.a_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dA, CL_TRUE,
+                                   buffer.offA_ * sizeof(T),
+                                   buffer.lda_ * buffer.a_num_vector *
                                        sizeof(T),
-                                   buffer_.a_, 0, NULL, NULL);
+                                   buffer.hA, 0, NULL, NULL);
 
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_b_, CL_TRUE,
-                                   buffer_.offB_ * sizeof(T),
-                                   buffer_.ldb_ * buffer_.b_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dB, CL_TRUE,
+                                   buffer.offB_ * sizeof(T),
+                                   buffer.ldb_ * buffer.b_num_vector *
                                        sizeof(T),
-                                   buffer_.b_, 0, NULL, NULL);
+                                   buffer.hB, 0, NULL, NULL);
 
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-                                   buffer_.offC_ * sizeof(T),
-                                   buffer_.ldc_ * buffer_.c_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dC, CL_TRUE,
+                                   buffer.offC_ * sizeof(T),
+                                   buffer.ldc_ * buffer.c_num_vector *
                                    sizeof(T),
-                                   buffer_.c_, 0, NULL, NULL);
+                                   buffer.hC, 0, NULL, NULL);
 		xGemm_Function(false);
-		err = clEnqueueReadBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-			                      buffer_.offC_ * sizeof(T), buffer_.ldc_ * buffer_.c_num_vectors_ *
+		err = clEnqueueReadBuffer(queues_[0], buffer.dC, CL_TRUE,
+			                      buffer.offC_ * sizeof(T), buffer.ldc_ * buffer.c_num_vector *
                                        sizeof(T),
-								  buffer_.c_, 0, NULL, &event_);
+								  buffer.hC, 0, NULL, &event_);
 		clWaitForEvents(1, &event_);
-	timer.Stop(timer_id);
+	    timer.Stop(timer_id);
 	}
 	void roundtrip_func_rect()
 	{
-	timer.Start(timer_id);
+	    timer.Start(timer_id);
 		cl_int err;
 		//rect
 		size_t a_buffer_origin[3] = {0,0,0}; 
 		size_t a_host_origin[3] = {0,0,0};
-		size_t a_region[3] = {buffer_.m_*sizeof(T),buffer_.k_,1};
+		size_t a_region[3] = {buffer.m_*sizeof(T),buffer.k_,1};
 		size_t a_buffer_row_pitch=0*sizeof(T);//lda
 		size_t a_buffer_slice_pitch=0;
-		size_t a_host_row_pitch=buffer_.lda_*sizeof(T);
+		size_t a_host_row_pitch=buffer.lda_*sizeof(T);
 		size_t a_host_slice_pitch=0;
 
 		size_t b_buffer_origin[3] = {0,0,0}; 
 		size_t b_host_origin[3] = {0,0,0};
-		size_t b_region[3] = {buffer_.k_*sizeof(T),buffer_.n_,1};
+		size_t b_region[3] = {buffer.k_*sizeof(T),buffer.n_,1};
 		size_t b_buffer_row_pitch=0*sizeof(T);//ldb
 		size_t b_buffer_slice_pitch=0;
-		size_t b_host_row_pitch=buffer_.ldb_*sizeof(T);
+		size_t b_host_row_pitch=buffer.ldb_*sizeof(T);
 		size_t b_host_slice_pitch=0;
 
 		size_t c_buffer_origin[3] = {0,0,0}; 
 		size_t c_host_origin[3] = {0,0,0};
-		size_t c_region[3] = {buffer_.m_*sizeof(T),buffer_.n_,1};
+		size_t c_region[3] = {buffer.m_*sizeof(T),buffer.n_,1};
 		size_t c_buffer_row_pitch=0*sizeof(T);//ldc
 		size_t c_buffer_slice_pitch=0;
-		size_t c_host_row_pitch=buffer_.ldc_*sizeof(T);
+		size_t c_host_row_pitch=buffer.ldc_*sizeof(T);
 		size_t c_host_slice_pitch=0;
 
-        buffer_.buf_a_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
-                                       (buffer_.k_*buffer_.m_ +
-                                           buffer_.offA_) * sizeof(T),
+        buffer.dA = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
+                                       (buffer.k_*buffer.m_ +
+                                           buffer.offA_) * sizeof(T),
                                        NULL, &err);
 
-        buffer_.buf_b_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
-                                        (buffer_.k_ * buffer_.n_ +
-                                            buffer_.offB_) * sizeof(T),
+        buffer.dB = clCreateBuffer(ctx_, CL_MEM_READ_ONLY,
+                                        (buffer.k_ * buffer.n_ +
+                                            buffer.offB_) * sizeof(T),
                                         NULL, &err);
 
-        buffer_.buf_c_ = clCreateBuffer(ctx_, CL_MEM_READ_WRITE,
-                                        (buffer_.m_ * buffer_.n_ +
-                                            buffer_.offC_) * sizeof(T),
+        buffer.dC = clCreateBuffer(ctx_, CL_MEM_READ_WRITE,
+                                        (buffer.m_ * buffer.n_ +
+                                            buffer.offC_) * sizeof(T),
                                         NULL, &err);
         /*
-		err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_a_, CL_TRUE,
-                                   buffer_.offA_ * sizeof(T),
-                                   buffer_.lda_ * buffer_.a_num_vectors_ *
+		err = clEnqueueWriteBuffer(queues_[0], buffer.dA, CL_TRUE,
+                                   buffer.offA_ * sizeof(T),
+                                   buffer.lda_ * buffer.a_num_vector *
                                        sizeof(T),
-                                   buffer_.a_, 0, NULL, NULL);
+                                   buffer.hA, 0, NULL, NULL);
 		
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_b_, CL_TRUE,
-                                   buffer_.offB_ * sizeof(T),
-                                   buffer_.ldb_ * buffer_.b_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dB, CL_TRUE,
+                                   buffer.offB_ * sizeof(T),
+                                   buffer.ldb_ * buffer.b_num_vector *
                                        sizeof(T),
-                                   buffer_.b_, 0, NULL, NULL);
+                                   buffer.hB, 0, NULL, NULL);
 
-        err = clEnqueueWriteBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-                                   buffer_.offC_ * sizeof(T),
-                                   buffer_.ldc_ * buffer_.c_num_vectors_ *
+        err = clEnqueueWriteBuffer(queues_[0], buffer.dC, CL_TRUE,
+                                   buffer.offC_ * sizeof(T),
+                                   buffer.ldc_ * buffer.c_num_vector *
                                    sizeof(T),
-                                   buffer_.c_, 0, NULL, NULL);*/
-        err = clEnqueueWriteBufferRect(queues_[0], buffer_.buf_a_, CL_TRUE, a_buffer_origin, a_host_origin, a_region, a_buffer_row_pitch,
-										a_buffer_slice_pitch, a_host_row_pitch, a_host_slice_pitch, buffer_.a_, 0, NULL, NULL);
-        err = clEnqueueWriteBufferRect(queues_[0], buffer_.buf_b_, CL_TRUE, b_buffer_origin, b_host_origin, b_region, b_buffer_row_pitch,
-										b_buffer_slice_pitch, b_host_row_pitch, b_host_slice_pitch, buffer_.b_, 0, NULL, NULL);
-        err = clEnqueueWriteBufferRect(queues_[0], buffer_.buf_c_, CL_TRUE, c_buffer_origin, c_host_origin, c_region, c_buffer_row_pitch,
-										c_buffer_slice_pitch, c_host_row_pitch, c_host_slice_pitch, buffer_.c_, 0, NULL, NULL);
+                                   buffer.hC, 0, NULL, NULL);*/
+        err = clEnqueueWriteBufferRect(queues_[0], buffer.dA, CL_TRUE, a_buffer_origin, a_host_origin, a_region, a_buffer_row_pitch,
+										a_buffer_slice_pitch, a_host_row_pitch, a_host_slice_pitch, buffer.hA, 0, NULL, NULL);
+        err = clEnqueueWriteBufferRect(queues_[0], buffer.dB, CL_TRUE, b_buffer_origin, b_host_origin, b_region, b_buffer_row_pitch,
+										b_buffer_slice_pitch, b_host_row_pitch, b_host_slice_pitch, buffer.hB, 0, NULL, NULL);
+        err = clEnqueueWriteBufferRect(queues_[0], buffer.dC, CL_TRUE, c_buffer_origin, c_host_origin, c_region, c_buffer_row_pitch,
+										c_buffer_slice_pitch, c_host_row_pitch, c_host_slice_pitch, buffer.hC, 0, NULL, NULL);
 
-		if(buffer_.trans_a_==clblasNoTrans)
+		if(buffer.transA==clblasNoTrans)
 		{
-			buffer_.lda_=buffer_.m_;
+			buffer.lda_=buffer.m_;
 		}
 		else
 		{
-			buffer_.lda_=buffer_.k_;
+			buffer.lda_=buffer.k_;
 		}
-		if(buffer_.trans_b_==clblasNoTrans)
+		if(buffer.transB==clblasNoTrans)
 		{
-			buffer_.ldb_=buffer_.k_;
+			buffer.ldb_=buffer.k_;
 		}
 		else
 		{
-			buffer_.ldb_=buffer_.n_;
+			buffer.ldb_=buffer.n_;
 		}
-		buffer_.ldc_=buffer_.m_;
+		buffer.ldc_=buffer.m_;
 		xGemm_Function(false);
 		/*
-		err = clEnqueueReadBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-			                      buffer_.offC_ * sizeof(T), buffer_.ldc_ * buffer_.c_num_vectors_ *
+		err = clEnqueueReadBuffer(queues_[0], buffer.dC, CL_TRUE,
+			                      buffer.offC_ * sizeof(T), buffer.ldc_ * buffer.c_num_vector *
                                        sizeof(T),
-								  buffer_.c_, 0, NULL, &event_);
+								  buffer.hC, 0, NULL, &event_);
 		*/
-		err = ::clEnqueueReadBufferRect(queues_[0], buffer_.buf_c_, CL_TRUE, c_buffer_origin, c_host_origin, c_region, c_buffer_row_pitch,
-										c_buffer_slice_pitch, c_host_row_pitch, c_host_slice_pitch, buffer_.c_, 0, NULL, &event_);
+		err = ::clEnqueueReadBufferRect(queues_[0], buffer.dC, CL_TRUE, c_buffer_origin, c_host_origin, c_region, c_buffer_row_pitch,
+										c_buffer_slice_pitch, c_host_row_pitch, c_host_slice_pitch, buffer.hC, 0, NULL, &event_);
 		clWaitForEvents(1, &event_);
 	timer.Stop(timer_id);
 	}	
@@ -563,100 +582,100 @@ public:
 
 		cl_int err;
 		// Create buffers with CL_MEM_ALLOC_HOST_PTR for zero copy
-        buffer_.buf_a_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-                                       (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
+        buffer.dA = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
+                                       (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
                                        NULL, &err);
 
-        buffer_.buf_b_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-                                        (buffer_.ldb_ * buffer_.b_num_vectors_ +
-                                            buffer_.offB_) * sizeof(T),
+        buffer.dB = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
+                                        (buffer.ldb_ * buffer.b_num_vector +
+                                            buffer.offB_) * sizeof(T),
                                         NULL, &err);
 
-        buffer_.buf_c_ = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR,
-                                        (buffer_.ldc_ * buffer_.c_num_vectors_ +
-                                            buffer_.offC_) * sizeof(T),
+        buffer.dC = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR,
+                                        (buffer.ldc_ * buffer.c_num_vector +
+                                            buffer.offC_) * sizeof(T),
                                         NULL, &err);
 
 		// map the buffers to pointers at host device
 		T *map_a,*map_b,*map_c;
-		map_a = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_a_, CL_TRUE, CL_MAP_WRITE, 0, 
-										  (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
+		map_a = (T*)clEnqueueMapBuffer(queues_[0], buffer.dA, CL_TRUE, CL_MAP_WRITE, 0, 
+										  (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
 										   0, NULL, NULL, &err);
-		map_b = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_b_, CL_TRUE, CL_MAP_WRITE, 0, 
-										  (buffer_.ldb_*buffer_.b_num_vectors_ +
-                                           buffer_.offB_) * sizeof(T),
+		map_b = (T*)clEnqueueMapBuffer(queues_[0], buffer.dB, CL_TRUE, CL_MAP_WRITE, 0, 
+										  (buffer.ldb_*buffer.b_num_vector +
+                                           buffer.offB_) * sizeof(T),
 										   0, NULL, NULL, &err);
-	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_c_, CL_TRUE, CL_MAP_WRITE, 0, 
-										  (buffer_.lda_*buffer_.c_num_vectors_ +
-                                           buffer_.offC_) * sizeof(T),
+	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer.dC, CL_TRUE, CL_MAP_WRITE, 0, 
+										  (buffer.lda_*buffer.c_num_vector +
+                                           buffer.offC_) * sizeof(T),
 										   0, NULL, NULL, &err);
 		// memcpy the input A, B, C to the host pointers
-		memcpy( map_a, buffer_.a_, ( buffer_.lda_*buffer_.a_num_vectors_ + buffer_.offA_) * sizeof( T ) );
-		memcpy( map_b, buffer_.b_, ( buffer_.ldb_*buffer_.b_num_vectors_ + buffer_.offB_) * sizeof( T ) );
-		memcpy( map_c, buffer_.c_, ( buffer_.ldc_*buffer_.c_num_vectors_ + buffer_.offC_) * sizeof( T ) );
+		memcpy( map_a, buffer.hA, ( buffer.lda_*buffer.a_num_vector + buffer.offA_) * sizeof( T ) );
+		memcpy( map_b, buffer.hB, ( buffer.ldb_*buffer.b_num_vector + buffer.offB_) * sizeof( T ) );
+		memcpy( map_c, buffer.hC, ( buffer.ldc_*buffer.c_num_vector + buffer.offC_) * sizeof( T ) );
 		// unmap the buffers
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_a_, map_a, 0, NULL, NULL);
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_b_, map_b, 0, NULL, NULL);
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_c_, map_c, 0, NULL, NULL);
+		clEnqueueUnmapMemObject(queues_[0], buffer.dA, map_a, 0, NULL, NULL);
+		clEnqueueUnmapMemObject(queues_[0], buffer.dB, map_b, 0, NULL, NULL);
+		clEnqueueUnmapMemObject(queues_[0], buffer.dC, map_c, 0, NULL, NULL);
 		// calling clBLAS
 		xGemm_Function(false);
 		// map the C buffer again to read output
-	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_c_, CL_TRUE, CL_MAP_READ, 0, 
-										  (buffer_.lda_*buffer_.c_num_vectors_ +
-                                           buffer_.offC_) * sizeof(T),
+	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer.dC, CL_TRUE, CL_MAP_READ, 0, 
+										  (buffer.lda_*buffer.c_num_vector +
+                                           buffer.offC_) * sizeof(T),
 										   0, NULL, NULL, &err);
-		memcpy( map_c, buffer_.c_, ( buffer_.ldc_*buffer_.c_num_vectors_ + buffer_.offC_) * sizeof( T ) );
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_c_, map_c, 0, NULL, &event_);
+		memcpy( map_c, buffer.hC, ( buffer.ldc_*buffer.c_num_vector + buffer.offC_) * sizeof( T ) );
+		clEnqueueUnmapMemObject(queues_[0], buffer.dC, map_c, 0, NULL, &event_);
 		clWaitForEvents(1, &event_);
 
 	timer.Stop(timer_id);
 	}
 	void usehostptr_roundtrip_func()
 	{
-	timer.Start(timer_id);
+	    timer.Start(timer_id);
 		cl_int err;
-        buffer_.buf_a_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
-                                       (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
-                                       buffer_.a_, &err);
+        buffer.dA = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                                       (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
+                                       buffer.hA, &err);
 
-        buffer_.buf_b_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
-                                        (buffer_.ldb_ * buffer_.b_num_vectors_ +
-                                            buffer_.offB_) * sizeof(T),
-                                        buffer_.b_, &err);
+        buffer.dB = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                                        (buffer.ldb_ * buffer.b_num_vector +
+                                            buffer.offB_) * sizeof(T),
+                                        buffer.hB, &err);
 
-        buffer_.buf_c_ = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                                        (buffer_.ldc_ * buffer_.c_num_vectors_ +
-                                            buffer_.offC_) * sizeof(T),
-                                        buffer_.c_, &err);
+        buffer.dC = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                                        (buffer.ldc_ * buffer.c_num_vector +
+                                            buffer.offC_) * sizeof(T),
+                                        buffer.hC, &err);
 		xGemm_Function(true);
-	timer.Stop(timer_id);
+	    timer.Stop(timer_id);
 	}
 	void copyhostptr_roundtrip_func()
 	{
 	timer.Start(timer_id);
 		cl_int err;
-        buffer_.buf_a_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                       (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
-                                       buffer_.a_, &err);
+        buffer.dA = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                       (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
+                                       buffer.hA, &err);
 
-        buffer_.buf_b_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                        (buffer_.ldb_ * buffer_.b_num_vectors_ +
-                                            buffer_.offB_) * sizeof(T),
-                                        buffer_.b_, &err);
+        buffer.dB = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                        (buffer.ldb_ * buffer.b_num_vector +
+                                            buffer.offB_) * sizeof(T),
+                                        buffer.hB, &err);
 
-        buffer_.buf_c_ = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                        (buffer_.ldc_ * buffer_.c_num_vectors_ +
-                                            buffer_.offC_) * sizeof(T),
-                                        buffer_.c_, &err);
+        buffer.dC = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                        (buffer.ldc_ * buffer.c_num_vector +
+                                            buffer.offC_) * sizeof(T),
+                                        buffer.hC, &err);
 		xGemm_Function(false);
-		err = clEnqueueReadBuffer(queues_[0], buffer_.buf_c_, CL_TRUE,
-			                      buffer_.offC_ * sizeof(T), buffer_.ldc_ * buffer_.c_num_vectors_ *
+		err = clEnqueueReadBuffer(queues_[0], buffer.dC, CL_TRUE,
+			                      buffer.offC_ * sizeof(T), buffer.ldc_ * buffer.c_num_vector *
                                        sizeof(T),
-								  buffer_.c_, 0, NULL, &event_);
+								  buffer.hC, 0, NULL, &event_);
 		clWaitForEvents(1, &event_);
 	timer.Stop(timer_id);
 	}
@@ -667,52 +686,52 @@ public:
 
 		cl_int err;
 
-        buffer_.buf_a_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_PERSISTENT_MEM_AMD,
-                                       (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
+        buffer.dA = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_PERSISTENT_MEM_AMD,
+                                       (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
                                        NULL, &err);
 
-        buffer_.buf_b_ = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_PERSISTENT_MEM_AMD,
-                                        (buffer_.ldb_ * buffer_.b_num_vectors_ +
-                                            buffer_.offB_) * sizeof(T),
+        buffer.dB = clCreateBuffer(ctx_, CL_MEM_READ_ONLY | CL_MEM_USE_PERSISTENT_MEM_AMD,
+                                        (buffer.ldb_ * buffer.b_num_vector +
+                                            buffer.offB_) * sizeof(T),
                                         NULL, &err);
 
-        buffer_.buf_c_ = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_USE_PERSISTENT_MEM_AMD,
-                                        (buffer_.ldc_ * buffer_.c_num_vectors_ +
-                                            buffer_.offC_) * sizeof(T),
+        buffer.dC = clCreateBuffer(ctx_, CL_MEM_READ_WRITE | CL_MEM_USE_PERSISTENT_MEM_AMD,
+                                        (buffer.ldc_ * buffer.c_num_vector +
+                                            buffer.offC_) * sizeof(T),
                                         NULL, &err);
 
 		// map the buffers to pointers at host devices
 		T *map_a,*map_b,*map_c;
-		map_a = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_a_, CL_TRUE, CL_MAP_WRITE, 0, 
-										  (buffer_.lda_*buffer_.a_num_vectors_ +
-                                           buffer_.offA_) * sizeof(T),
+		map_a = (T*)clEnqueueMapBuffer(queues_[0], buffer.dA, CL_TRUE, CL_MAP_WRITE, 0, 
+										  (buffer.lda_*buffer.a_num_vector +
+                                           buffer.offA_) * sizeof(T),
 										   0, NULL, NULL, &err);
-		map_b = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_b_, CL_TRUE, CL_MAP_WRITE, 0, 
-										  (buffer_.ldb_*buffer_.b_num_vectors_ +
-                                           buffer_.offB_) * sizeof(T),
+		map_b = (T*)clEnqueueMapBuffer(queues_[0], buffer.dB, CL_TRUE, CL_MAP_WRITE, 0, 
+										  (buffer.ldb_*buffer.b_num_vector +
+                                           buffer.offB_) * sizeof(T),
 										   0, NULL, NULL, &err);
-	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_c_, CL_TRUE, CL_MAP_WRITE, 0, 
-										  (buffer_.lda_*buffer_.c_num_vectors_ +
-                                           buffer_.offC_) * sizeof(T),
+	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer.dC, CL_TRUE, CL_MAP_WRITE, 0, 
+										  (buffer.lda_*buffer.c_num_vector +
+                                           buffer.offC_) * sizeof(T),
 										   0, NULL, NULL, &err);
 		// memcpy the input A, B, C to the host pointers
-		memcpy( map_a, buffer_.a_, ( buffer_.lda_*buffer_.a_num_vectors_ + buffer_.offA_) * sizeof( T ) );
-		memcpy( map_b, buffer_.b_, ( buffer_.ldb_*buffer_.b_num_vectors_ + buffer_.offB_) * sizeof( T ) );
-		memcpy( map_c, buffer_.c_, ( buffer_.ldc_*buffer_.c_num_vectors_ + buffer_.offC_) * sizeof( T ) );
+		memcpy( map_a, buffer.hA, ( buffer.lda_*buffer.a_num_vector + buffer.offA_) * sizeof( T ) );
+		memcpy( map_b, buffer.hB, ( buffer.ldb_*buffer.b_num_vector + buffer.offB_) * sizeof( T ) );
+		memcpy( map_c, buffer.hC, ( buffer.ldc_*buffer.c_num_vector + buffer.offC_) * sizeof( T ) );
 		// unmap the buffers
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_a_, map_a, 0, NULL, NULL);
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_b_, map_b, 0, NULL, NULL);
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_c_, map_c, 0, NULL, NULL);
+		clEnqueueUnmapMemObject(queues_[0], buffer.dA, map_a, 0, NULL, NULL);
+		clEnqueueUnmapMemObject(queues_[0], buffer.dB, map_b, 0, NULL, NULL);
+		clEnqueueUnmapMemObject(queues_[0], buffer.dC, map_c, 0, NULL, NULL);
 		// calling clBLAS
 		xGemm_Function(false);
 		// map the C buffer again to read output
-	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer_.buf_c_, CL_TRUE, CL_MAP_READ, 0, 
-										  (buffer_.lda_*buffer_.c_num_vectors_ +
-                                           buffer_.offC_) * sizeof(T),
+	    map_c = (T*)clEnqueueMapBuffer(queues_[0], buffer.dC, CL_TRUE, CL_MAP_READ, 0, 
+										  (buffer.lda_*buffer.c_num_vector +
+                                           buffer.offC_) * sizeof(T),
 										   0, NULL, NULL, &err);
-		memcpy( map_c, buffer_.c_, ( buffer_.ldc_*buffer_.c_num_vectors_ + buffer_.offC_) * sizeof( T ) );
-		clEnqueueUnmapMemObject(queues_[0], buffer_.buf_c_, map_c, 0, NULL, &event_);
+		memcpy( map_c, buffer.hC, ( buffer.ldc_*buffer.c_num_vector + buffer.offC_) * sizeof( T ) );
+		clEnqueueUnmapMemObject(queues_[0], buffer.dC, map_c, 0, NULL, &event_);
 		clWaitForEvents(1, &event_);
 
 	timer.Stop(timer_id);
@@ -731,23 +750,23 @@ public:
 
         initialize_scalars(alpha, beta);
 
-        buffer_.m_ = M;
-        buffer_.n_ = N;
-        buffer_.k_ = K;
-        buffer_.offA_ = offA;
-        buffer_.offB_ = offBX;
-        buffer_.offC_ = offCY;
+        buffer.m_ = M;
+        buffer.n_ = N;
+        buffer.k_ = K;
+        buffer.offA_ = offA;
+        buffer.offB_ = offBX;
+        buffer.offC_ = offCY;
 
         if (order_option == 0)
         {
             order_ = clblasRowMajor;
             if (transA_option == 0)
             {
-                buffer_.trans_a_ = clblasNoTrans;
-                buffer_.a_num_vectors_ = M;
+                buffer.transA = clblasNoTrans;
+                buffer.a_num_vector = M;
                 if (lda == 0)
                 {
-                    buffer_.lda_ = K;
+                    buffer.lda_ = K;
                 }
                 else if (lda < K)
                 {
@@ -756,23 +775,23 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
             else
             {
-                buffer_.a_num_vectors_ = K;
+                buffer.a_num_vector = K;
                 if (transA_option == 1)
                 {
-                    buffer_.trans_a_ = clblasTrans;
+                    buffer.transA = clblasTrans;
                 }
                 else if (transA_option == 2)
                 {
-                    buffer_.trans_a_ = clblasConjTrans;
+                    buffer.transA = clblasConjTrans;
                 }
                 if (lda == 0)
                 {
-                    buffer_.lda_ = M;
+                    buffer.lda_ = M;
                 }
                 else if (lda < M)
                 {
@@ -781,17 +800,17 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
 
             if (transB_option == 0)
             {
-                buffer_.b_num_vectors_ = K;
-                buffer_.trans_b_ = clblasNoTrans;
+                buffer.b_num_vector = K;
+                buffer.transB = clblasNoTrans;
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = N;
+                    buffer.ldb_ = N;
                 }
                 else if (ldb < N)
                 {
@@ -800,24 +819,24 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
             else
             {
-                buffer_.b_num_vectors_ = N;
+                buffer.b_num_vector = N;
                 if (transB_option == 1)
                 {
-                    buffer_.trans_b_ = clblasTrans;
+                    buffer.transB = clblasTrans;
                 }
                 else if (transB_option == 2)
                 {
-                    buffer_.trans_b_ = clblasConjTrans;
+                    buffer.transB = clblasConjTrans;
                 }
 
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = K;
+                    buffer.ldb_ = K;
                 }
                 else if (ldb < K)
                 {
@@ -826,13 +845,13 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
 
             if (ldc == 0)
             {
-                buffer_.ldc_ = N;
+                buffer.ldc_ = N;
             }
             else if (ldc < N)
             {
@@ -840,20 +859,20 @@ public:
             }
             else
             {
-                buffer_.ldc_ = ldc;
+                buffer.ldc_ = ldc;
             }
-            buffer_.c_num_vectors_ = M;
+            buffer.c_num_vector = M;
         }
         else
         {
             order_ = clblasColumnMajor;
             if (transA_option == 0)
             {
-                buffer_.a_num_vectors_ = K;
-                buffer_.trans_a_ = clblasNoTrans;
+                buffer.a_num_vector = K;
+                buffer.transA = clblasNoTrans;
                 if (lda == 0)
                 {
-                    buffer_.lda_ = M;
+                    buffer.lda_ = M;
                 }
                 else if (lda < M)
                 {
@@ -862,25 +881,25 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
             else
             {
-                buffer_.a_num_vectors_ = M;
+                buffer.a_num_vector = M;
                 if (transA_option == 1)
                 {
-                    buffer_.trans_a_ = clblasTrans;
+                    buffer.transA = clblasTrans;
                 }
                 else if (transA_option == 2)
                 {
-                    buffer_.trans_a_ = clblasConjTrans;
+                    buffer.transA = clblasConjTrans;
                 }
 
 
                 if (lda == 0)
                 {
-                    buffer_.lda_ = K;
+                    buffer.lda_ = K;
                 }
                 else if (lda < K)
                 {
@@ -889,18 +908,18 @@ public:
                 }
                 else
                 {
-                    buffer_.lda_ = lda;
+                    buffer.lda_ = lda;
                 }
             }
 
             if (transB_option == 0)
             {
-                buffer_.b_num_vectors_ = N;
-                buffer_.trans_b_ = clblasNoTrans;
+                buffer.b_num_vector = N;
+                buffer.transB = clblasNoTrans;
 
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = K;
+                    buffer.ldb_ = K;
                 }
                 else if (ldb < K)
                 {
@@ -909,24 +928,24 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
             else
             {
-                buffer_.b_num_vectors_ = K;
+                buffer.b_num_vector = K;
                 if (transB_option == 1)
                 {
-                    buffer_.trans_b_ = clblasTrans;
+                    buffer.transB = clblasTrans;
                 }
                 else if (transB_option == 2)
                 {
-                    buffer_.trans_b_ = clblasConjTrans;
+                    buffer.transB = clblasConjTrans;
                 }
 
                 if (ldb == 0)
                 {
-                    buffer_.ldb_ = N;
+                    buffer.ldb_ = N;
                 }
                 else if (ldb < N)
                 {
@@ -935,13 +954,13 @@ public:
                 }
                 else
                 {
-                    buffer_.ldb_ = ldb;
+                    buffer.ldb_ = ldb;
                 }
             }
 
             if (ldc == 0)
             {
-                buffer_.ldc_ = M;
+                buffer.ldc_ = M;
             }
             else if (ldc < M)
             {
@@ -949,42 +968,47 @@ public:
             }
             else
             {
-                buffer_.ldc_ = ldc;
+                buffer.ldc_ = ldc;
             }
-            buffer_.c_num_vectors_ = N;
+            buffer.c_num_vector = N;
         }
-        buffer_.a_ = new T[buffer_.lda_*buffer_.a_num_vectors_];
-        buffer_.b_ = new T[buffer_.ldb_*buffer_.b_num_vectors_];
-        buffer_.c_ = new T[buffer_.ldc_*buffer_.c_num_vectors_ ];
+        buffer.hA = new T[buffer.lda_*buffer.a_num_vector];
+        buffer.hB = new T[buffer.ldb_*buffer.b_num_vector];
+        buffer.hC = new T[buffer.ldc_*buffer.c_num_vector ];
 
     }
 	void releaseGPUBuffer_deleteCPUBuffer()
 	{
 		//this is necessary since we are running a iteration of tests and calculate the average time. (in client.cpp)
 		//need to do this before we eventually hit the destructor
-		delete buffer_.a_;
-        delete buffer_.b_;
-        delete buffer_.c_;
-        OPENCL_V_THROW( clReleaseMemObject(buffer_.buf_a_),
+		delete buffer.hA;
+        delete buffer.hB;
+        delete buffer.hC;
+        delete buffer.hR;
+        OPENCL_V_THROW( clReleaseMemObject(buffer.dA),
                         "releasing buffer A");
-        OPENCL_V_THROW( clReleaseMemObject(buffer_.buf_b_),
+        OPENCL_V_THROW( clReleaseMemObject(buffer.dB),
                         "releasing buffer B");
-        OPENCL_V_THROW( clReleaseMemObject(buffer_.buf_c_),
+        OPENCL_V_THROW( clReleaseMemObject(buffer.dC),
                         "releasing buffer C");
+
 	}
+
+   
 
 protected:
     void initialize_scalars(double alpha, double beta)
     {
-        buffer_.alpha_ = makeScalar<T>(alpha);
-        buffer_.beta_ = makeScalar<T>(beta);
+        buffer.alpha_ = makeScalar<T>(alpha);
+        buffer.beta_ = makeScalar<T>(beta);
     }
 
 private:
-    xGemmBuffer<T> buffer_;
+    xGemmBuffer<T> buffer;
 	void xGemm_Function(bool flush, cl_uint apiCallCount = 1);
-  unsigned int numQueuesToUse;
-  cl_event events_[numQueues];
+    unsigned int numQueuesToUse;
+    cl_event events_[numQueues];
+    void verfication();
 
 }; // class xgemm
 
@@ -993,43 +1017,48 @@ void
 xGemm<cl_float>::
 xGemm_Function(bool flush, cl_uint apiCallCount )
 {
-  for (unsigned int i = 0; i < numQueues; i++) {
-    events_[i] = NULL;
-  }
+    for (unsigned int i = 0; i < numQueues; i++) 
+    {
+        events_[i] = NULL;
+    }
 	for (unsigned int i = 0; i < apiCallCount; i++)
 	{
-		clblasSgemm(order_, buffer_.trans_a_, buffer_.trans_b_,
-			buffer_.m_, buffer_.n_, buffer_.k_, buffer_.alpha_,
-			buffer_.buf_a_, buffer_.offA_, buffer_.lda_,
-			buffer_.buf_b_, buffer_.offB_, buffer_.ldb_,
-			buffer_.beta_, buffer_.buf_c_, buffer_.offC_,
-			buffer_.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
+		clblasSgemm(order_, buffer.transA, buffer.transB,
+			buffer.m_, buffer.n_, buffer.k_, buffer.alpha_,
+			buffer.dA, buffer.offA_, buffer.lda_,
+			buffer.dB, buffer.offB_, buffer.ldb_,
+			buffer.beta_, buffer.dC, buffer.offC_,
+			buffer.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
 	}
 	//flush==true if only the kernel time (library call) is timed
 	//flush==false if memory time is also timed
 	if (flush==true)
 	{
-    // check if any valid events returned
-    cl_uint numValidEvents = 0;
-    for (unsigned int i = 0; i < numQueuesToUse; i++) {
-      if (events_[i]) {
-        cl_uint clReferenceCount;
-        cl_int err = clGetEventInfo(events_[i], CL_EVENT_REFERENCE_COUNT, sizeof(clReferenceCount), &clReferenceCount, NULL);
-        if ( err == CL_SUCCESS) {
-          //printf("events[%u/%u] has %u references\n", i, numQueuesToUse, clReferenceCount );
-          numValidEvents++;
-        } else {
+      // check if any valid events returned
+      cl_uint numValidEvents = 0;
+      for (unsigned int i = 0; i < numQueuesToUse; i++) 
+      {
+        if (events_[i]) 
+        {
+            cl_uint clReferenceCount;
+            cl_int err = clGetEventInfo(events_[i], CL_EVENT_REFERENCE_COUNT, sizeof(clReferenceCount), &clReferenceCount, NULL);
+            if ( err == CL_SUCCESS) {
+            //printf("events[%u/%u] has %u references\n", i, numQueuesToUse, clReferenceCount );
+                numValidEvents++;
+            } 
+            else {
           //printf("events[%u/%u] invalid; err = %i\n", i, numQueuesToUse, err );
+            }
         }
-      } else {
+        else {
         //printf("events[%u/%u] is NULL\n", i, numQueuesToUse );
+        }
       }
-    }
     
-    for (unsigned int i = 0; i < numQueuesToUse; i++) {
-      clFlush(queues_[i]);
-    }
-		clWaitForEvents(numValidEvents, events_);
+      for (unsigned int i = 0; i < numQueuesToUse; i++) {
+        clFlush(queues_[i]);
+      }
+	  clWaitForEvents(numValidEvents, events_);
 	}
 }
 
@@ -1042,13 +1071,13 @@ xGemm_Function(bool flush, cl_uint apiCallCount )
     events_[i] = NULL;
   }
   for (unsigned int i = 0; i < apiCallCount; i++)
-	{
-	  clblasDgemm(order_, buffer_.trans_a_, buffer_.trans_b_,
-                     buffer_.m_, buffer_.n_, buffer_.k_, buffer_.alpha_,
-                     buffer_.buf_a_, buffer_.offA_, buffer_.lda_,
-                     buffer_.buf_b_, buffer_.offB_, buffer_.ldb_,
-                     buffer_.beta_, buffer_.buf_c_, buffer_.offC_,
-                     buffer_.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
+  {
+	  clblasDgemm(order_, buffer.transA, buffer.transB,
+                     buffer.m_, buffer.n_, buffer.k_, buffer.alpha_,
+                     buffer.dA, buffer.offA_, buffer.lda_,
+                     buffer.dB, buffer.offB_, buffer.ldb_,
+                     buffer.beta_, buffer.dC, buffer.offC_,
+                     buffer.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
   }
 	//flush==true if only the kernel time (library call) is timed
 	//flush==false if memory time is also timed
@@ -1088,12 +1117,12 @@ xGemm_Function(bool flush, cl_uint apiCallCount )
   }
   for (unsigned int i = 0; i < apiCallCount; i++)
 	{
-	  clblasCgemm(order_, buffer_.trans_a_, buffer_.trans_b_,
-                     buffer_.m_, buffer_.n_, buffer_.k_, buffer_.alpha_,
-                     buffer_.buf_a_, buffer_.offA_, buffer_.lda_,
-                     buffer_.buf_b_, buffer_.offB_, buffer_.ldb_,
-                     buffer_.beta_, buffer_.buf_c_, buffer_.offC_,
-                     buffer_.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
+	  clblasCgemm(order_, buffer.transA, buffer.transB,
+                     buffer.m_, buffer.n_, buffer.k_, buffer.alpha_,
+                     buffer.dA, buffer.offA_, buffer.lda_,
+                     buffer.dB, buffer.offB_, buffer.ldb_,
+                     buffer.beta_, buffer.dC, buffer.offC_,
+                     buffer.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
   }
 	//flush==true if only the kernel time (library call) is timed
 	//flush==false if memory time is also timed
@@ -1133,12 +1162,12 @@ xGemm_Function(bool flush, cl_uint apiCallCount )
   }
   for (unsigned int i = 0; i < apiCallCount; i++)
 	{
-	  clblasZgemm(order_, buffer_.trans_a_, buffer_.trans_b_,
-                     buffer_.m_, buffer_.n_, buffer_.k_, buffer_.alpha_,
-                     buffer_.buf_a_, buffer_.offA_, buffer_.lda_,
-                     buffer_.buf_b_, buffer_.offB_, buffer_.ldb_,
-                     buffer_.beta_, buffer_.buf_c_, buffer_.offC_,
-                     buffer_.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
+	  clblasZgemm(order_, buffer.transA, buffer.transB,
+                     buffer.m_, buffer.n_, buffer.k_, buffer.alpha_,
+                     buffer.dA, buffer.offA_, buffer.lda_,
+                     buffer.dB, buffer.offB_, buffer.ldb_,
+                     buffer.beta_, buffer.dC, buffer.offC_,
+                     buffer.ldc_, numQueuesToUse, queues_, 0, NULL, events_);
   }
 	//flush==true if only the kernel time (library call) is timed
 	//flush==false if memory time is also timed
@@ -1173,7 +1202,7 @@ double
 xGemm<cl_float2>::
 gflops()
 {
-    return (8.0*buffer_.m_*buffer_.n_*buffer_.k_)/(time_in_ns() / buffer_.apiCallCount);
+    return (8.0*buffer.m_*buffer.n_*buffer.k_)/(time_in_ns() / buffer.apiCallCount);
 }
 
 template<>
@@ -1181,7 +1210,7 @@ double
 xGemm<cl_double2>::
 gflops()
 {
-    return (8.0*buffer_.m_*buffer_.n_*buffer_.k_)/(time_in_ns() / buffer_.apiCallCount);
+    return (8.0*buffer.m_*buffer.n_*buffer.k_)/(time_in_ns() / buffer.apiCallCount);
 }
 
 template<>
@@ -1200,4 +1229,106 @@ gflops_formula()
     return "8.0*M*N*K/time";
 }
 
+
+template<>
+void
+xGemm<cl_float>::
+verfication()
+{
+    /*
+        sgemm(encodeTranspose(buffer.transA), encodeTranspose(buffer.transB),
+        buffer.m_, buffer.n_, buffer.k_,
+        buffer.alpha_,
+        buffer.hA + buffer.offA_, buffer.lda_,
+        buffer.hB + buffer.offB_, buffer.ldb_,
+        buffer.beta_,
+        buffer.hR + buffer.offC_, buffer.ldc_);
+    */
+    
+    //perform GEMM NN
+    for (int i = 0; i < buffer.m_; i++) {
+        for (int j = 0; j < buffer.n_; j++) {
+            float tmp = 0.0f;
+            for (int k = 0; k < buffer.k_; k++) {
+                tmp = tmp + buffer.hA[i + k * buffer.lda_] * buffer.hB[k + j * buffer.ldb_];
+            }
+            buffer.hR[i + j * buffer.ldc_] = buffer.hR[i + j * buffer.ldc_] * buffer.beta_ + tmp * buffer.alpha_;
+        }
+    }
+    
+    float norm_acml = slange('F', buffer.m_, buffer.n_, (float*)buffer.hR, buffer.ldc_);
+
+    float alpha = -1.0f;
+
+    float norm_clblas = slange('F', buffer.m_, buffer.n_, (float*)buffer.hC, buffer.ldc_);
+
+    std::cout << "norm of ACML C: " << norm_acml << "; norm of clBLAS C:" << norm_clblas <<  std::endl;
+    
+    float error = 0.0f;
+    for (int i = 0; i < buffer.m_; i++)
+    {
+        for (int j = 0; j < buffer.n_; j++)
+        {
+            float err = fabs(buffer.hR[i + j * buffer.ldc_] - buffer.hC[i + j * buffer.ldc_]);
+            //std::cout << err << std::endl; 
+            error = fmax(err, error);
+        }
+    }
+
+    saxpy(buffer.ldc_ * buffer.n_, alpha, (float*)buffer.hR, 1, (float*)buffer.hC, 1);
+
+    float norm = slange('F', buffer.m_, buffer.n_, (float*)buffer.hC, buffer.ldc_) / norm_acml;
+
+    std::cout << "biggest error: " << error << ";norm error compared to ACML :" << norm << std::endl;
+}
+
+template<>
+void
+xGemm<cl_double>::
+verfication()
+{
+
+}
+
+template<>
+void
+xGemm<cl_float2>::
+verfication()
+{
+
+}
+
+template<>
+void
+xGemm<cl_double2>::
+verfication()
+{
+
+    zgemm(encodeTranspose(buffer.transA), encodeTranspose(buffer.transB),
+        buffer.m_, buffer.n_, buffer.k_,
+        (doublecomplex*)&(buffer.alpha_),
+        (doublecomplex*)buffer.hA, buffer.lda_,
+        (doublecomplex*)buffer.hB, buffer.ldb_,
+        (doublecomplex*)&(buffer.beta_),
+        (doublecomplex*)buffer.hR, buffer.ldc_);
+
+    
+    /*
+    void
+    zgemm(char transa, char transb, int m, int n, int k, doublecomplex *alpha, doublecomplex *a, int lda, doublecomplex *b, int ldb, doublecomplex *beta, doublecomplex *c, int ldc)
+    {
+    zgemm_(&transa, &transb, &m, &n, &k, alpha, a, &lda, b, &ldb, beta, c, &ldc);
+    }
+    */
+
+    double norm = zlange('F', buffer.m_, buffer.n_, (doublecomplex*)buffer.hR, buffer.ldc_);
+
+    doublecomplex alpha;
+    alpha.real = -1.0; alpha.imag = 0.0;
+
+    zaxpy(buffer.m_ * buffer.n_, &alpha, (doublecomplex*)buffer.hR, 1, (doublecomplex*)buffer.hC, 1);
+
+    norm = zlange('F', buffer.m_, buffer.n_, (doublecomplex*)buffer.hC, buffer.ldc_) / norm;
+
+}
 #endif // ifndef CLBLAS_BENCHMARK_XGEMM_HXX__

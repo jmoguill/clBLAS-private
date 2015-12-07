@@ -292,7 +292,7 @@ public:
 
         //OPENCL_V_THROW(clGetDeviceIDs(platform_, devType, 1, &device_, NULL), "getting CPU IDs");
   
-
+        platform_ = platform_list[0];
         props_[0] = CL_CONTEXT_PLATFORM;
         props_[1] = (cl_context_properties)platform_;
         props_[2] = 0;
